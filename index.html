@@ -1,0 +1,954 @@
+
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0"
+  }
+}
+</script>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Infi-Notes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <!-- PDF.js for Thumbnail Generation and Rendering -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <style>
+      :root {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f3f4f6;
+        --text-primary: #111827;
+        --text-secondary: #6b7280;
+        --border-primary: #e5e7eb;
+        --accent: #3b82f6;
+        --notebook-line: #e5e7eb;
+        --notebook-margin: #ef4444;
+        --success: #10b981;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+
+        /* Glass Backgrounds */
+        --bg-primary-glass: rgba(255, 255, 255, 0.7);
+        --bg-secondary-glass: rgba(243, 244, 246, 0.7);
+
+        /* Clock Theme */
+        --clock-bg-start: #3b82f6;
+        --clock-bg-end: #10b981;
+        --clock-text: #ffffff;
+
+        /* Sidebar Gradient */
+        --sidebar-bg-start: #f9fafb;
+        --sidebar-bg-end: #e5e7eb;
+        
+        /* Notebook Gradient */
+        --notebook-gradient-start: #f3f4f6;
+        --notebook-gradient-middle: #e9ecef;
+        --notebook-gradient-end: #dde2e6;
+
+        /* Highlight Colors */
+        --highlight-kp-bg: rgba(59, 130, 246, 0.15);
+        --highlight-ps-bg: rgba(16, 185, 129, 0.15);
+        --highlight-dt-bg: rgba(239, 68, 68, 0.15);
+        --highlight-lc-bg: rgba(249, 115, 22, 0.15);
+        --highlight-kp-text: #2563eb;
+        --highlight-ps-text: #059669;
+        --highlight-dt-text: #dc2626;
+        --highlight-lc-text: #ea580c;
+
+        /* Calculator Light Theme */
+        --calc-bg: #f1f2f3;
+        --calc-display-text: #000000;
+        --calc-history-text: #6b7280;
+        --calc-btn-light-gray-bg: #d4d4d2;
+        --calc-btn-light-gray-text: #1c1c1c;
+        --calc-btn-dark-gray-bg: #ffffff;
+        --calc-btn-dark-gray-text: #1c1c1c;
+        --calc-btn-orange-bg: #f1a33c;
+        --calc-btn-orange-text: #ffffff;
+        
+        /* Sci Calc - Light */
+        --calc-sci-bg-start: #f8fafc;
+        --calc-sci-bg-end: #e2e8f0;
+        --calc-sci-text: #1e293b;
+        --calc-sci-btn-num-bg: #ffffff;
+        --calc-sci-btn-num-text: #1e293b;
+        --calc-sci-btn-op-bg: #3b82f6;
+        --calc-sci-btn-op-text: #ffffff;
+        --calc-sci-btn-func-bg: #e0e7ff;
+        --calc-sci-btn-func-text: #3730a3;
+        --calc-sci-btn-action-bg: #fee2e2;
+        --calc-sci-btn-action-text: #991b1b;
+        
+        /* Widget Placeholder - Light Theme */
+        --widget-placeholder-c1: #60a5fa;
+        --widget-placeholder-c2: #34d399;
+        --widget-placeholder-c3: #f472b6;
+        --widget-placeholder-c4: #a78bfa;
+        
+        /* AnimeJS Background */
+        --anime-tile-opacity: 0.02;
+
+        /* Landing Page Gradient */
+        --landing-bg-start: #e0f2fe;
+        --landing-bg-middle: #f0f9ff;
+        --landing-bg-end: #dbeafe;
+      }
+      .matrix {
+        /* Transparent backgrounds to let the rain show through */
+        --bg-primary: rgba(2, 2, 2, 0.75);
+        --bg-secondary: rgba(13, 13, 13, 0.65);
+        
+        --text-primary: #00FF41;
+        --text-secondary: #008F11;
+        --border-primary: rgba(0, 59, 0, 0.5);
+        --accent: #00FF41;
+        --notebook-line: rgba(0, 59, 0, 0.3);
+        --notebook-margin: #ef4444;
+        --success: #00FF41;
+        --danger: #F92672;
+        --warning: #f59e0b;
+
+        /* Glass Backgrounds Override */
+        --bg-primary-glass: rgba(2, 2, 2, 0.4);
+        --bg-secondary-glass: rgba(13, 13, 13, 0.4);
+
+        /* Clock Theme */
+        --clock-bg-start: #00FF41;
+        --clock-bg-end: #008F11;
+        --clock-text: #020202;
+
+        /* Sidebar Gradient - Transparent */
+        --sidebar-bg-start: rgba(2, 2, 2, 0.6);
+        --sidebar-bg-end: rgba(13, 13, 13, 0.6);
+
+        /* Notebook Gradient - Transparent */
+        --notebook-gradient-start: rgba(13, 13, 13, 0.5);
+        --notebook-gradient-middle: rgba(26, 26, 26, 0.5);
+        --notebook-gradient-end: rgba(13, 13, 13, 0.5);
+
+        /* Highlight Colors */
+        --highlight-kp-bg: rgba(0, 255, 65, 0.15);
+        --highlight-ps-bg: rgba(0, 255, 65, 0.15);
+        --highlight-dt-bg: rgba(249, 38, 114, 0.2);
+        --highlight-lc-bg: rgba(0, 255, 65, 0.15);
+        --highlight-kp-text: #39FF14;
+        --highlight-ps-text: #39FF14;
+        --highlight-dt-text: #F92672;
+        --highlight-lc-text: #39FF14;
+
+        /* Calculator Matrix Theme - Slightly transparent */
+        --calc-bg: rgba(10, 10, 10, 0.9);
+        --calc-display-text: #00FF41;
+        --calc-history-text: #008F11;
+        --calc-btn-light-gray-bg: #005F00;
+        --calc-btn-light-gray-text: #00FF41;
+        --calc-btn-dark-gray-bg: #003B00;
+        --calc-btn-dark-gray-text: #00FF41;
+        --calc-btn-orange-bg: #008F11;
+        --calc-btn-orange-text: #000000;
+        
+        /* Sci Calc - Matrix */
+        --calc-sci-bg-start: rgba(2, 20, 2, 0.95);
+        --calc-sci-bg-end: rgba(0, 0, 0, 0.95);
+        --calc-sci-text: #00FF41;
+        --calc-sci-btn-num-bg: #003B00;
+        --calc-sci-btn-num-text: #00FF41;
+        --calc-sci-btn-op-bg: #008F11;
+        --calc-sci-btn-op-text: #000000;
+        --calc-sci-btn-func-bg: #001A00;
+        --calc-sci-btn-func-text: #00FF41;
+        --calc-sci-btn-action-bg: #003B00;
+        --calc-sci-btn-action-text: #F92672;
+        
+        /* Widget Placeholder - Matrix */
+        --widget-placeholder-c1: #00FF41;
+        --widget-placeholder-c2: #008F11;
+        --widget-placeholder-c3: #003B00;
+        --widget-placeholder-c4: #0D0208;
+        
+        /* AnimeJS Background */
+        --anime-tile-opacity: 0.05;
+
+        /* Landing Page Gradient */
+        --landing-bg-start: #0D0D0D;
+        --landing-bg-middle: #020202;
+        --landing-bg-end: #1A1A1A;
+      }
+      
+      .matrix .notebook-container,
+      .matrix .widget-container,
+      .matrix aside,
+      .matrix .mediapanel-root,
+      .matrix .todo-list-card {
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+          border: 1px solid rgba(0, 255, 65, 0.15);
+          box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+      }
+      
+      .matrix .notebook-textarea {
+          background-color: transparent;
+      }
+
+      /* Keep Header clearer at the top */
+      .matrix header {
+          background-color: rgba(2, 2, 2, 0.3);
+          backdrop-filter: none; /* Let the rain be seen clearly */
+          border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+          z-index: 50;
+      }
+
+      .monokai {
+        --bg-primary: #272822;
+        --bg-secondary: #3E3D32;
+        --text-primary: #F8F8F2;
+        --text-secondary: #A9A8A1;
+        --border-primary: #75715E;
+        --accent: #FF6188;
+        --notebook-line: #49483e;
+        --notebook-margin: #ef4444;
+        --success: #A6E22E;
+        --danger: #F92672;
+        --warning: #f59e0b;
+        
+        /* Glass Backgrounds */
+        --bg-primary-glass: rgba(39, 40, 34, 0.6);
+        --bg-secondary-glass: rgba(62, 61, 50, 0.6);
+
+        /* Clock Theme */
+        --clock-bg-start: #FF6188;
+        --clock-bg-end: #A6E22E;
+        --clock-text: #272822;
+
+        /* Sidebar Gradient */
+        --sidebar-bg-start: #3E3D32;
+        --sidebar-bg-end: #272822;
+
+        /* Notebook Gradient */
+        --notebook-gradient-start: #3E3D32;
+        --notebook-gradient-middle: #4a493e;
+        --notebook-gradient-end: #3E3D32;
+
+        /* Highlight Colors */
+        --highlight-kp-bg: rgba(255, 97, 136, 0.2);
+        --highlight-ps-bg: rgba(166, 226, 46, 0.2);
+        --highlight-dt-bg: rgba(249, 38, 114, 0.2);
+        --highlight-lc-bg: rgba(253, 151, 31, 0.2);
+        --highlight-kp-text: #FF6188;
+        --highlight-ps-text: #A6E22E;
+        --highlight-dt-text: #F92672;
+        --highlight-lc-text: #FD971F;
+
+        /* Calculator Monokai "Synthwave" Theme */
+        --calc-bg: #2a2139;
+        --calc-display-text: #f0f0f0;
+        --calc-history-text: #8c7b9b;
+        --calc-btn-light-gray-bg: #5b4a75;
+        --calc-btn-light-gray-text: #f0f0f0;
+        --calc-btn-dark-gray-bg: #403255;
+        --calc-btn-dark-gray-text: #f0f0f0;
+        --calc-btn-orange-bg: #e91e63;
+        --calc-btn-orange-text: #ffffff;
+        
+        /* Sci Calc - Monokai */
+        --calc-sci-bg-start: #2a2139;
+        --calc-sci-bg-end: #1e1b2e;
+        --calc-sci-text: #f8f8f2;
+        --calc-sci-btn-num-bg: #403255;
+        --calc-sci-btn-num-text: #f8f8f2;
+        --calc-sci-btn-op-bg: #FF6188;
+        --calc-sci-btn-op-text: #272822;
+        --calc-sci-btn-func-bg: #5b4a75;
+        --calc-sci-btn-func-text: #66D9EF;
+        --calc-sci-btn-action-bg: #3E3D32;
+        --calc-sci-btn-action-text: #F92672;
+        
+        /* Widget Placeholder - Monokai */
+        --widget-placeholder-c1: #FF6188;
+        --widget-placeholder-c2: #A6E22E;
+        --widget-placeholder-c3: #66D9EF;
+        --widget-placeholder-c4: #FD971F;
+
+        /* AnimeJS Background */
+        --anime-tile-opacity: 0.03;
+        
+        /* Landing Page Gradient */
+        --landing-bg-start: #3E3D32;
+        --landing-bg-middle: #272822;
+        --landing-bg-end: #49483e;
+      }
+      
+      .pitch-black {
+          --bg-primary: #000000;
+          --bg-secondary: #1a1a1a;
+          --text-primary: #f0f0f0;
+          --text-secondary: #a0a0a0;
+          --border-primary: #444444;
+          --accent: #00BFFF;
+          --notebook-line: #2a2a2a;
+          --notebook-margin: #ef4444;
+          --success: #22c55e;
+          --danger: #ef4444;
+          --warning: #f59e0b;
+
+          /* Glass Backgrounds */
+          --bg-primary-glass: rgba(0, 0, 0, 0.4);
+          --bg-secondary-glass: rgba(26, 26, 26, 0.4);
+          
+          /* Clock Theme */
+          --clock-bg-start: #00BFFF;
+          --clock-bg-end: #a855f7;
+          --clock-text: #ffffff;
+
+          /* Sidebar Gradient */
+          --sidebar-bg-start: #000000;
+          --sidebar-bg-end: #1a1a1a;
+
+          /* Notebook Gradient */
+          --notebook-gradient-start: #1a1a1a;
+          --notebook-gradient-middle: #2a2a2a;
+          --notebook-gradient-end: #1a1a1a;
+
+          /* Highlight Colors */
+          --highlight-kp-bg: rgba(0, 191, 255, 0.2);
+          --highlight-ps-bg: rgba(34, 197, 94, 0.2);
+          --highlight-dt-bg: rgba(239, 68, 68, 0.2);
+          --highlight-lc-bg: rgba(249, 115, 22, 0.2);
+          --highlight-kp-text: #38bdf8;
+          --highlight-ps-text: #4ade80;
+          --highlight-dt-text: #f87171;
+          --highlight-lc-text: #fb923c;
+
+          /* Calculator Pitch Black Theme */
+          --calc-bg: #101010;
+          --calc-display-text: #ffffff;
+          --calc-history-text: #a0a0a0;
+          --calc-btn-light-gray-bg: #666666;
+          --calc-btn-light-gray-text: #000000;
+          --calc-btn-dark-gray-bg: #333333;
+          --calc-btn-dark-gray-text: #ffffff;
+          --calc-btn-orange-bg: #0099cc;
+          --calc-btn-orange-text: #ffffff;
+          
+          /* Sci Calc - Pitch Black */
+          --calc-sci-bg-start: #000000;
+          --calc-sci-bg-end: #1a1a1a;
+          --calc-sci-text: #ffffff;
+          --calc-sci-btn-num-bg: #333333;
+          --calc-sci-btn-num-text: #ffffff;
+          --calc-sci-btn-op-bg: #00BFFF;
+          --calc-sci-btn-op-text: #000000;
+          --calc-sci-btn-func-bg: #1a1a1a;
+          --calc-sci-btn-func-text: #a855f7;
+          --calc-sci-btn-action-bg: #333333;
+          --calc-sci-btn-action-text: #ef4444;
+          
+          /* Widget Placeholder - Pitch Black */
+          --widget-placeholder-c1: #00BFFF;
+          --widget-placeholder-c2: #a855f7;
+          --widget-placeholder-c3: #4ade80;
+          --widget-placeholder-c4: #f43f5e;
+
+          /* AnimeJS Background */
+          --anime-tile-opacity: 0.03;
+
+          /* Landing Page Gradient */
+          --landing-bg-start: #1a1a1a;
+          --landing-bg-middle: #000000;
+          --landing-bg-end: #2a2a2a;
+      }
+
+      .frosty {
+        --bg-primary: rgba(255, 255, 255, 0.3);
+        --bg-secondary: rgba(255, 255, 255, 0.5);
+        --text-primary: #374151;
+        --text-secondary: #6b7280;
+        --border-primary: rgba(255, 255, 255, 0.6);
+        --accent: #8b5cf6; /* Soft Purple */
+        --notebook-line: rgba(0, 0, 0, 0.1);
+        --notebook-margin: #ef4444;
+        --success: #10b981;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+
+        /* Glass Backgrounds */
+        --bg-primary-glass: rgba(255, 255, 255, 0.3);
+        --bg-secondary-glass: rgba(255, 255, 255, 0.5);
+
+        /* Clock Theme - Pastel Gradient */
+        --clock-bg-start: #8b5cf6;
+        --clock-bg-end: #3b82f6;
+        --clock-text: #ffffff;
+
+        /* Sidebar Gradient */
+        --sidebar-bg-start: rgba(255, 255, 255, 0.4);
+        --sidebar-bg-end: rgba(255, 255, 255, 0.2);
+
+        /* Notebook Gradient */
+        --notebook-gradient-start: rgba(255, 255, 255, 0.4);
+        --notebook-gradient-middle: rgba(255, 255, 255, 0.6);
+        --notebook-gradient-end: rgba(255, 255, 255, 0.4);
+
+        /* Highlight Colors - Soft Pastels */
+        --highlight-kp-bg: rgba(139, 92, 246, 0.2);
+        --highlight-ps-bg: rgba(59, 130, 246, 0.2);
+        --highlight-dt-bg: rgba(244, 63, 94, 0.2);
+        --highlight-lc-bg: rgba(245, 158, 11, 0.2);
+        --highlight-kp-text: #6d28d9;
+        --highlight-ps-text: #1d4ed8;
+        --highlight-dt-text: #be123c;
+        --highlight-lc-text: #b45309;
+
+        /* Calculator Frosty Theme */
+        --calc-bg: rgba(255, 255, 255, 0.6);
+        --calc-display-text: #374151;
+        --calc-history-text: #6b7280;
+        --calc-btn-light-gray-bg: rgba(255, 255, 255, 0.5);
+        --calc-btn-light-gray-text: #374151;
+        --calc-btn-dark-gray-bg: rgba(255, 255, 255, 0.8);
+        --calc-btn-dark-gray-text: #374151;
+        --calc-btn-orange-bg: #8b5cf6;
+        --calc-btn-orange-text: #ffffff;
+
+        /* Sci Calc - Frosty */
+        --calc-sci-bg-start: rgba(255, 255, 255, 0.7);
+        --calc-sci-bg-end: rgba(245, 243, 255, 0.7);
+        --calc-sci-text: #374151;
+        --calc-sci-btn-num-bg: rgba(255, 255, 255, 0.9);
+        --calc-sci-btn-num-text: #374151;
+        --calc-sci-btn-op-bg: #8b5cf6;
+        --calc-sci-btn-op-text: #ffffff;
+        --calc-sci-btn-func-bg: rgba(237, 233, 254, 0.8);
+        --calc-sci-btn-func-text: #6d28d9;
+        --calc-sci-btn-action-bg: rgba(254, 226, 226, 0.8);
+        --calc-sci-btn-action-text: #be123c;
+
+        /* Widget Placeholder - Pastel Rainbow */
+        --widget-placeholder-c1: #8b5cf6;
+        --widget-placeholder-c2: #3b82f6;
+        --widget-placeholder-c3: #10b981;
+        --widget-placeholder-c4: #f43f5e;
+
+        /* Landing Page Gradient */
+        --landing-bg-start: #ede9fe;
+        --landing-bg-middle: #f3e8ff;
+        --landing-bg-end: #dbeafe;
+      }
+
+      .frosty .notebook-container,
+      .frosty .widget-container,
+      .frosty aside,
+      .frosty .mediapanel-root,
+      .frosty .todo-list-card,
+      .frosty header {
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.6);
+          box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+      }
+      
+      /* Global Smooth Theme Transition - Optimized */
+      *, *::before, *::after {
+        transition-property: background-color, border-color, color, fill, stroke, box-shadow, text-decoration-color;
+        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); /* Standard ease-in-out */
+        transition-duration: 300ms;
+      }
+
+      /* Exception for elements that are transformed/animated by JS to prevent jank */
+      .tile, .dot, .strobe-tile, .floating-shape {
+         transition: opacity 0.5s ease; /* Only transition opacity for background effects */
+      }
+
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+      
+      .font-journal {
+          font-family: 'Playfair Display', serif;
+      }
+
+      #root {
+        width: 100%;
+        height: 100vh;
+      }
+
+      /* Glassmorphism overrides for Wallpaper Mode */
+      html.has-wallpaper .notebook-root,
+      html.has-wallpaper .sidebar-root,
+      html.has-wallpaper .mediapanel-root {
+          background-color: var(--bg-primary-glass);
+          backdrop-filter: blur(15px);
+          -webkit-backdrop-filter: blur(15px);
+      }
+      
+      html.has-wallpaper .notebook-textarea pre,
+      .matrix .notebook-textarea pre {
+        background-color: var(--bg-primary-glass);
+      }
+
+      .notebook-title-input {
+        background: transparent;
+        border: none;
+        outline: none;
+        font-size: 2rem;
+        font-weight: 700;
+        flex: 1;
+        min-width: 0;
+        padding: 12px 12px 8px 64px;
+        color: var(--text-primary);
+      }
+      .notebook-title-input::placeholder {
+        color: var(--text-secondary);
+        opacity: 0.6;
+      }
+
+      .notebook-textarea {
+        background-color: transparent;
+        background-image:
+          linear-gradient(var(--notebook-line) 1px, transparent 1px);
+        background-size: 100% 2rem;
+        line-height: 2rem;
+        font-size: 1.1rem;
+        padding: 8px 64px;
+        border: none;
+        position: relative;
+        overflow-y: auto;
+        color: var(--text-primary);
+        z-index: 1;
+        flex-grow: 1;
+      }
+      .notebook-textarea p, .notebook-textarea div, .notebook-textarea li {
+          line-height: 2rem;
+          min-height: 2rem;
+      }
+      .notebook-textarea > :first-child {
+        margin-top: 0;
+      }
+      .notebook-textarea h1, .notebook-textarea h2, .notebook-textarea h3 {
+        line-height: 1.3;
+        padding-top: 1rem;
+        margin-bottom: 0.25rem;
+      }
+      .notebook-textarea ul {
+        list-style-type: disc;
+        padding-left: 24px;
+        margin: 8px 0;
+      }
+      .notebook-textarea ol {
+        list-style-type: decimal;
+        padding-left: 24px;
+        margin: 8px 0;
+      }
+       .notebook-textarea blockquote {
+        border-left: 4px solid var(--border-primary);
+        padding-left: 16px;
+        color: var(--text-secondary);
+        margin: 8px 0;
+      }
+      .notebook-textarea pre {
+        background-color: var(--bg-primary);
+        padding: 8px;
+        border-radius: 4px;
+        margin: 8px 0;
+        white-space: pre-wrap;
+        font-family: monospace;
+        line-height: 1.5;
+        min-height: auto;
+      }
+
+      .notebook-textarea::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 52px;
+        bottom: 0;
+        width: 2px;
+        background-color: var(--notebook-margin);
+      }
+
+      .notebook-container {
+        position: relative;
+        flex-grow: 1;
+        background-color: var(--bg-secondary);
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .notebook-spiral {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        bottom: 8px;
+        width: 16px;
+        background-image: radial-gradient(circle at center, var(--bg-primary) 5px, transparent 6px);
+        background-size: 16px 24px;
+        background-position: 0 6px;
+        background-repeat: repeat-y;
+        z-index: 2;
+      }
+      
+      .animated-popover {
+        animation: popover-in 0.2s ease-out;
+      }
+
+      @keyframes popover-in {
+        from {
+          opacity: 0;
+          transform: translateY(-10px) scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes popIn {
+        from { opacity: 0; transform: scale(0.95) translateY(10px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+
+      @keyframes gradient-animation {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .animated-gradient-bg {
+        background: linear-gradient(90deg, var(--clock-bg-start), var(--clock-bg-end), var(--clock-bg-start));
+        background-size: 200% 200%;
+        animation: gradient-animation 8s ease infinite;
+      }
+      
+      .animated-notebook-gradient {
+        background: linear-gradient(-45deg, var(--notebook-gradient-start), var(--notebook-gradient-middle), var(--notebook-gradient-end));
+        background-size: 400% 400%;
+        animation: gradient-animation 15s ease infinite;
+      }
+      
+      .animated-landing-gradient {
+        background: linear-gradient(-45deg, var(--landing-bg-start), var(--landing-bg-middle), var(--landing-bg-end));
+        background-size: 400% 400%;
+        animation: gradient-animation 20s ease infinite;
+      }
+
+      /* Scrollbar Styling */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: var(--border-primary);
+        border-radius: 3px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background-color: var(--text-secondary);
+      }
+
+      /* Utility for button press effect */
+      .btn-press:active {
+        transform: scale(0.95);
+      }
+
+      /* Summary Highlights */
+      .summary-highlight {
+        padding: 0 2px;
+        border-radius: 2px;
+        font-weight: 500;
+      }
+      .highlight-kp { background-color: var(--highlight-kp-bg); color: var(--highlight-kp-text); }
+      .highlight-ps { background-color: var(--highlight-ps-bg); color: var(--highlight-ps-text); }
+      .highlight-dt { background-color: var(--highlight-dt-bg); color: var(--highlight-dt-text); }
+      .highlight-lc { background-color: var(--highlight-lc-bg); color: var(--highlight-lc-text); }
+
+      .markdown-body img {
+          max-width: 100%;
+          display: block;
+          margin: 1rem auto;
+          border-radius: 8px;
+      }
+      
+      /* Editor Toolbar */
+      .editor-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      
+      .editor-toolbar-button {
+          padding: 4px;
+          border-radius: 4px;
+          color: var(--text-secondary);
+          transition: all 0.2s;
+      }
+      .editor-toolbar-button:hover {
+          background-color: var(--bg-secondary);
+          color: var(--text-primary);
+      }
+      .editor-toolbar-button.active {
+          background-color: var(--accent);
+          color: white;
+      }
+      
+      .editor-toolbar-separator {
+          width: 1px;
+          height: 16px;
+          background-color: var(--border-primary);
+          margin: 0 4px;
+      }
+      
+      .editor-toolbar-select {
+          background: transparent;
+          border: none;
+          font-size: 0.8rem;
+          font-weight: 600;
+          color: var(--text-secondary);
+          cursor: pointer;
+          outline: none;
+      }
+
+      /* Anime Backgrounds */
+      .anime-background, .pulsing-dots-background, .grid-strobe-background, .floating-shapes-background {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: -1;
+          overflow: hidden;
+      }
+      .tile, .strobe-tile {
+          width: 30px;
+          height: 30px;
+          background-color: var(--text-primary);
+          opacity: 0;
+          position: absolute;
+      }
+      .dot {
+          width: 4px;
+          height: 4px;
+          background-color: var(--accent);
+          border-radius: 50%;
+          position: absolute;
+          opacity: 0;
+      }
+      .floating-shape {
+          position: absolute;
+          background-color: var(--accent);
+          border-radius: 50%;
+          opacity: 0;
+      }
+      
+      .wallpaper-background {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-size: cover;
+          background-position: center;
+          z-index: -2;
+          opacity: 0.3; /* Default opacity */
+          transition: opacity 0.5s;
+      }
+      
+      .hotdog-loop-animation {
+          animation: spin 1s ease-in-out;
+      }
+      @keyframes spin { 100% { transform: rotate(360deg); } }
+      
+      .theme-toast {
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          margin-top: 8px;
+          background-color: var(--text-primary);
+          color: var(--bg-primary);
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          white-space: nowrap;
+          animation: fade-in-out 1.5s ease-in-out forwards;
+          pointer-events: none;
+          z-index: 50;
+      }
+      @keyframes fade-in-out {
+          0% { opacity: 0; transform: translate(-50%, -5px); }
+          10% { opacity: 1; transform: translate(-50%, 0); }
+          90% { opacity: 1; transform: translate(-50%, 0); }
+          100% { opacity: 0; transform: translate(-50%, 5px); }
+      }
+
+      /* Pomodoro Alert */
+      @keyframes flash-red {
+          0%, 100% { background-color: #ef4444; }
+          50% { background-color: #b91c1c; }
+      }
+      .pomodoro-alert {
+          animation: flash-red 0.5s ease-in-out infinite;
+      }
+      
+      /* Widget gradients */
+      .animated-gradient-placeholder {
+          background: linear-gradient(135deg, var(--widget-placeholder-c1, #60a5fa), var(--widget-placeholder-c2, #34d399), var(--widget-placeholder-c3, #f472b6), var(--widget-placeholder-c4, #a78bfa));
+          background-size: 400% 400%;
+          animation: gradient-animation 3s ease infinite;
+          padding: 3px; 
+          box-sizing: border-box;
+          display: block;
+          min-height: 100%;
+      }
+
+      .widget-todo-gradient {
+          background: linear-gradient(to bottom, var(--bg-secondary), var(--bg-primary));
+      }
+      
+      /* PDF Viewer Text Layer */
+      .pdf-text-layer {
+          position: absolute;
+          left: 0;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          overflow: hidden;
+          line-height: 1.0;
+          pointer-events: none; /* Let clicks pass through to canvas if needed, but text selection needs interaction */
+      }
+      .pdf-text-layer > span {
+          color: transparent;
+          position: absolute;
+          white-space: pre;
+          cursor: text;
+          transform-origin: 0% 0%;
+          pointer-events: auto; /* Enable selection */
+      }
+      ::selection {
+          background: rgba(59, 130, 246, 0.3);
+      }
+      
+      /* Arrow Tag Shape */
+      .arrow-tag {
+          position: relative;
+          padding: 4px 12px 4px 10px;
+          clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%);
+          border-radius: 2px 0 0 2px; /* Slight round on the left */
+      }
+      
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+        20%, 40%, 60%, 80% { transform: translateX(5px); }
+      }
+      .shake-animation {
+        animation: shake 0.5s ease-in-out;
+      }
+      
+      /* View Transitions */
+      ::view-transition-old(root),
+      ::view-transition-new(root) {
+        animation-duration: 0.3s;
+      }
+
+      /* Button Animations */
+      @keyframes gradient-move {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      
+      @keyframes shimmer {
+        0% { background-position: -100% 0; }
+        100% { background-position: 200% 0; }
+      }
+
+      .btn-emerald-gradient {
+        background: linear-gradient(45deg, #059669, #10b981, #34d399);
+        background-size: 200% 200%;
+        animation: gradient-move 3s ease infinite;
+        color: white;
+        border: none;
+        box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.4), 0 2px 4px -1px rgba(16, 185, 129, 0.2);
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .btn-gold-gradient {
+        background: linear-gradient(45deg, #d97706, #f59e0b, #fbbf24, #fcd34d);
+        background-size: 300% 300%;
+        animation: gradient-move 4s ease infinite;
+        color: white;
+        border: none;
+        box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.4), 0 2px 4px -1px rgba(245, 158, 11, 0.2);
+        position: relative;
+        overflow: hidden;
+      }
+      
+      /* Glisten effect overlay */
+      .btn-gold-gradient::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+        animation: shimmer 3s infinite;
+        pointer-events: none;
+        z-index: 0;
+      }
+      
+      /* Infinity Drawing Animation */
+      @keyframes infinity-flow {
+          0% { stroke-dashoffset: 100; }
+          100% { stroke-dashoffset: 0; }
+      }
+      
+      .infinity-path-bg {
+          /* Static base path, no animation needed */
+      }
+      
+      .infinity-path-flow {
+          stroke-dasharray: 20 80; /* Glowing segment (20px) followed by gap (80px) */
+          stroke-dashoffset: 0;
+          animation: infinity-flow 2s linear infinite; /* Continuous flow */
+      }
+
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="index.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "Infi-Notes",
+  "description": "Focus, Watch, Write.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
