@@ -3,15 +3,11 @@ import React, { useEffect, useRef } from 'react';
 
 declare var anime: any;
 
-interface Props {
-    scrollContainerRef: React.RefObject<HTMLDivElement>;
-}
-
-const LandingPageBackground: React.FC<Props> = ({ scrollContainerRef }) => {
+const LandingPageBackground: React.FC = () => {
     const svgRef = useRef<SVGSVGElement>(null);
 
     useEffect(() => {
-        if (!svgRef.current || !scrollContainerRef.current) return;
+        if (!svgRef.current || typeof anime === 'undefined') return;
 
         const svgEl = svgRef.current;
         
@@ -21,77 +17,73 @@ const LandingPageBackground: React.FC<Props> = ({ scrollContainerRef }) => {
         }
 
         const width = window.innerWidth;
-        const height = window.innerHeight * 2.5; // Make it taller to allow for the drawing effect over scroll
+        const height = window.innerHeight;
         
-        const spacing = 50;
-        const cols = Math.floor(width / spacing);
-        const rows = Math.floor(height / spacing);
-        
-        const fragment = document.createDocumentFragment();
+        // Center point
+        const cx = width / 2;
+        const cy = height / 2;
+        const maxRadius = Math.min(width, height) / 2.5;
 
-        // Create a grid of Crosses (+)
-        for (let i = 0; i < cols; i++) {
-            for (let j = 0; j < rows; j++) {
-                const x = i * spacing;
-                const y = j * spacing;
-                const size = 10; // Size of the cross arms
+        // Create the polygon element
+        const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        polygon.setAttribute("fill", "none");
+        polygon.setAttribute("stroke", "var(--border-primary)");
+        polygon.setAttribute("stroke-width", "1");
+        polygon.setAttribute("opacity", "0.4");
+        svgEl.appendChild(polygon);
 
-                // Path for a cross shape
-                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                // Move to center-top, line to center-bottom, Move to left-center, line to right-center
-                const d = `M${x + spacing/2},${y + spacing/2 - size} L${x + spacing/2},${y + spacing/2 + size} M${x + spacing/2 - size},${y + spacing/2} L${x + spacing/2 + size},${y + spacing/2}`;
+        // Function to generate random points for a blob-like shape
+        function generatePoints() {
+            const numPoints = anime.random(8, 16); // Random number of vertices
+            let points = '';
+            
+            for (let i = 0; i < numPoints; i++) {
+                const angle = (Math.PI * 2 * i) / numPoints;
+                // Randomize radius for jagged effect
+                const radius = anime.random(maxRadius * 0.6, maxRadius);
                 
-                path.setAttribute("d", d);
-                path.setAttribute("stroke", "var(--text-secondary)");
-                path.setAttribute("stroke-width", "1");
-                path.setAttribute("fill", "none");
-                path.setAttribute("opacity", "0.3");
+                const x = cx + Math.cos(angle) * radius;
+                const y = cy + Math.sin(angle) * radius;
                 
-                fragment.appendChild(path);
+                points += `${x},${y} `;
             }
+            return points;
         }
-        
-        svgEl.appendChild(fragment);
 
-        // Set initial state to hidden (dashoffset)
-        const paths = svgEl.querySelectorAll('path');
-        
-        // Initialize Anime.js animation bound to scroll
-        // We set duration to 1 so we can scrub it precisely with seek(0 to 1)
-        const animation = anime({
-            targets: paths,
-            strokeDashoffset: [anime.setDashoffset, 0],
-            easing: 'easeInOutSine',
-            duration: 1000, // Arbitrary duration, we will seek manually
-            delay: anime.stagger(20, { grid: [cols, rows], from: 'center' }),
-            autoplay: false 
-        });
+        function animateShape() {
+            const newPoints = generatePoints();
+            
+            anime({
+                targets: polygon,
+                points: [{ value: newPoints }],
+                easing: 'easeInOutQuad',
+                duration: 2000,
+                complete: animateShape
+            });
+        }
 
-        const handleScroll = () => {
-            if (!scrollContainerRef.current) return;
-            const el = scrollContainerRef.current;
-            
-            // Calculate scroll percentage (0 to 1)
-            const maxScroll = el.scrollHeight - el.clientHeight;
-            const scrollPercent = Math.min(1, Math.max(0, el.scrollTop / maxScroll));
-            
-            // Sync animation progress to scroll position
-            animation.seek(animation.duration * scrollPercent);
+        // Initialize first shape
+        const initialPoints = generatePoints();
+        polygon.setAttribute("points", initialPoints);
+
+        // Start animation loop
+        animateShape();
+
+        // Handle resize to recenter
+        const handleResize = () => {
+            // A full re-init might be jarring, but we can just update the SVG viewBox if needed
+            // For now, let's just let it be or it might need a reload for perfect centering
         };
-
-        const container = scrollContainerRef.current;
-        container.addEventListener('scroll', handleScroll);
-        
-        // Initial sync
-        handleScroll();
+        window.addEventListener('resize', handleResize);
 
         return () => {
-            container.removeEventListener('scroll', handleScroll);
+            window.removeEventListener('resize', handleResize);
+            anime.remove(polygon);
         };
-    }, [scrollContainerRef]);
+    }, []);
 
     return (
-        <div className="fixed inset-0 z-0 pointer-events-none opacity-40">
+        <div className="fixed inset-0 z-0 pointer-events-none">
             <svg ref={svgRef} className="w-full h-full" style={{ overflow: 'visible' }} />
         </div>
     );

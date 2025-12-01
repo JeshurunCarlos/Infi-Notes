@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { NotePage, BackgroundAnimationType } from '../App';
-import { PlusIcon, PencilIcon, TrashIcon, ChevronRightIcon, ChevronDownIcon, MagnifyingGlassIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, FilmIcon, FolderIcon, DocumentTextIcon, FolderPlusIcon, DocumentPlusIcon, HashtagIcon, TagIcon } from './Icons';
+import { NotePage, BackgroundAnimationType } from '../types';
+import { PlusIcon, PencilIcon, TrashIcon, ChevronRightIcon, ChevronDownIcon, MagnifyingGlassIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, FilmIcon, FolderIcon, DocumentTextIcon, FolderPlusIcon, DocumentPlusIcon, HashtagIcon, TagIcon, CogIcon } from './Icons';
 
 type DropPosition = 'before' | 'after' | 'inside';
 
@@ -100,7 +100,6 @@ const PageItem: React.FC<PageItemProps> = ({
     
     if (page.isFolder) {
         // Folders allow dropping inside
-        // Zones: Top 25% -> Before, Bottom 25% -> After, Middle 50% -> Inside
         const zoneHeight = rect.height * 0.25;
         
         if (dragY < rect.top + zoneHeight) {
@@ -122,13 +121,12 @@ const PageItem: React.FC<PageItemProps> = ({
     
     setDragOverInfo({ pageId: page.id, position });
 
-    // Auto-expand folder on hover
     if (position === 'inside' && !isExpanded && page.isFolder) {
         if (!expandTimeoutRef.current) {
             expandTimeoutRef.current = setTimeout(() => {
                 toggleExpand(page.id);
                 expandTimeoutRef.current = null;
-            }, 600); // Delay expansion to prevent flickering
+            }, 600);
         }
     } else {
         if (expandTimeoutRef.current) {
@@ -160,7 +158,6 @@ const PageItem: React.FC<PageItemProps> = ({
         clearTimeout(expandTimeoutRef.current);
         expandTimeoutRef.current = null;
     }
-    // A brief timeout helps prevent flickering when moving over child elements
     setTimeout(() => {
         setDragOverInfo(current => (current?.pageId === page.id ? null : current));
     }, 50);
@@ -266,11 +263,12 @@ interface SidebarProps {
   tagsMap: Map<string, number>;
   selectedTag: string | null;
   onSelectTag: (tag: string | null) => void;
+  onOpenSettings: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
     isOpen, pages, activePageId, onSelectPage, onAddPage, onDeletePage, onRenamePage, onMovePage, backgroundAnimation, onAnimationChange,
-    tagsMap, selectedTag, onSelectTag
+    tagsMap, selectedTag, onSelectTag, onOpenSettings
 }) => {
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
   const [dragOverInfo, setDragOverInfo] = useState<DragOverInfo | null>(null);
@@ -402,7 +400,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Tags Section */}
             {tagsMap.size > 0 && (
-                <div className="pt-4 border-t border-[var(--border-primary)] mt-auto">
+                <div className="pt-4 border-t border-[var(--border-primary)] mt-auto mb-4">
                      <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] px-2 mb-3 flex justify-between items-center">
                          <span className="flex items-center gap-1"><TagIcon className="w-3 h-3" /> Tags</span>
                          {selectedTag && (
@@ -435,6 +433,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
             )}
         </nav>
+
+        {/* Footer: Settings */}
+        <div className="relative z-10 pt-2 border-t border-[var(--border-primary)] mt-2">
+            <button 
+                onClick={onOpenSettings}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--bg-secondary)] transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)] group btn-press"
+            >
+                <CogIcon className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
+                <span className="text-sm font-medium">Settings</span>
+            </button>
+        </div>
     </aside>
   );
 };

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef } from 'react';
-import { ToDoItem } from '../App';
+import { ToDoItem } from '../types';
 import { CheckIcon, PlusIcon, TrashIcon, ChevronDownIcon, BoardIcon, ListBulletIcon } from './Icons';
 import KanbanBoard from './KanbanBoard';
 

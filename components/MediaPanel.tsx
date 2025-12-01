@@ -1,8 +1,8 @@
 
-import React, { useState, useRef, useCallback } from 'react';
-import { PlusIcon, CloseIcon, DocumentTextIcon, FilmIcon, ArrowsPointingOutIcon, UploadIcon } from './Icons';
-import { WidgetState, WidgetType } from '../App';
-import { PomodoroWidget, ImageWidget, HyperlinkWidget, CalculatorWidget, StickyNoteWidget, MusicPlayerWidget, WidgetWrapper, WidgetSelectionView, SpotifyWidget, ToDoListWidget, TerminalWidget, GoogleSearchWidget, DictionaryWidget, ZipGameWidget, TicTacToeWidget, SnakeGameWidget } from './Widgets';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { PlusIcon, CloseIcon, DocumentTextIcon, FilmIcon, ArrowsPointingOutIcon, UploadIcon, ArrowsPointingInIcon } from './Icons';
+import { WidgetState, WidgetType } from '../types';
+import { PomodoroWidget, ImageWidget, HyperlinkWidget, CalculatorWidget, StickyNoteWidget, MusicPlayerWidget, WidgetWrapper, WidgetSelectionView, SpotifyWidget, ToDoListWidget, TerminalWidget, GoogleSearchWidget, DictionaryWidget, ZipGameWidget, TicTacToeWidget, SnakeGameWidget, ChatGPTWidget, Game2048Widget, NewsWidget } from './Widgets';
 import { performGoogleSearch } from '../lib/ai';
 
 interface MediaPanelProps {
@@ -49,8 +49,30 @@ const MediaPanel: React.FC<MediaPanelProps> = ({
   // New state for drag and drop sorting
   const [draggingWidgetIndex, setDraggingWidgetIndex] = useState<number | null>(null);
 
-  const [expandedCalculatorIndex, setExpandedCalculatorIndex] = useState<number | null>(null);
+  // Unified expansion state
+  const [expandedWidget, setExpandedWidget] = useState<{ index: number, type: WidgetType } | null>(null);
   
+  // Handle Global Alt+E to close expansions or selections
+  useEffect(() => {
+      const handleGlobalKeyDown = (e: KeyboardEvent) => {
+          if (e.altKey && e.key.toLowerCase() === 'e') {
+              e.preventDefault();
+              if (expandedWidget) {
+                  setExpandedWidget(null);
+              }
+              // If a widget is in selecting mode (WidgetSelectionView is visible), close it by removing/emptying
+              // We scan widgets to find any that are 'selecting'
+              widgets.forEach((w, index) => {
+                  if (w.type === 'selecting') {
+                      onRemoveWidget(index);
+                  }
+              });
+          }
+      };
+      window.addEventListener('keydown', handleGlobalKeyDown);
+      return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [expandedWidget, widgets, onRemoveWidget]);
+
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
@@ -287,7 +309,7 @@ const MediaPanel: React.FC<MediaPanelProps> = ({
         return (
             <WidgetWrapper title="Calculator" noPadding={true}>
                 <CalculatorWidget 
-                    onExpand={() => setExpandedCalculatorIndex(index)} 
+                    onExpand={() => setExpandedWidget({ index, type: 'calculator' })} 
                 />
             </WidgetWrapper>
         );
@@ -312,9 +334,26 @@ const MediaPanel: React.FC<MediaPanelProps> = ({
       case 'googlesearch':
         return (
             <WidgetWrapper title="Google Search" noPadding={true}>
-                <GoogleSearchWidget data={widget.data} onSearch={(query) => handleSearch(index, query)} />
+                <GoogleSearchWidget 
+                    data={widget.data} 
+                    onSearch={(query) => handleSearch(index, query)}
+                    onChange={(data) => updateWidgetData(index, data)}
+                    onExpand={() => setExpandedWidget({ index, type: 'googlesearch' })}
+                />
             </WidgetWrapper>
         );
+      case 'chatgpt':
+        return (
+            <WidgetWrapper title="ChatGPT" noPadding={true}>
+                <ChatGPTWidget 
+                    data={widget.data} 
+                    onChange={(data) => updateWidgetData(index, data)}
+                    onExpand={() => setExpandedWidget({ index, type: 'chatgpt' })}
+                />
+            </WidgetWrapper>
+        );
+      case 'news':
+        return <WidgetWrapper title="News" noPadding={true}><NewsWidget /></WidgetWrapper>;
       case 'snake':
         return <WidgetWrapper title="Snake Game" noPadding={true}><SnakeGameWidget /></WidgetWrapper>;
       case 'dictionary':
@@ -323,8 +362,10 @@ const MediaPanel: React.FC<MediaPanelProps> = ({
         return <WidgetWrapper title="Zip Game" noPadding={true}><ZipGameWidget /></WidgetWrapper>;
       case 'tictactoe':
         return <WidgetWrapper title="Tic-Tac-Toe" noPadding={true}><TicTacToeWidget /></WidgetWrapper>;
+      case 'game2048':
+        return <WidgetWrapper title="2048" noPadding={true}><Game2048Widget /></WidgetWrapper>;
       case 'selecting':
-        return <WidgetSelectionView onSelect={(type) => onSelectWidget(index, type)} onCancel={() => onSelectWidget(index, 'empty')} />;
+        return <WidgetSelectionView onSelect={(type) => onSelectWidget(index, type)} onCancel={() => onRemoveWidget(index)} />;
       case 'empty':
       default:
         return (
@@ -351,14 +392,38 @@ const MediaPanel: React.FC<MediaPanelProps> = ({
     <div className="mediapanel-root h-full bg-[var(--bg-primary)] p-4 transition-all overflow-y-auto custom-scrollbar relative">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="application/pdf" />
       
-      {/* Expanded Calculator Overlay - Reduced Size */}
-      {expandedCalculatorIndex !== null && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
-            <div className="w-[320px] h-[500px] shadow-2xl rounded-xl overflow-hidden border border-[var(--border-primary)] animate-[popIn_0.3s_cubic-bezier(0.16,1,0.3,1)]">
-                 <CalculatorWidget 
-                    isScientific={true} 
-                    onClose={() => setExpandedCalculatorIndex(null)} 
-                />
+      {/* Expanded Widget Overlay */}
+      {expandedWidget && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-[fade-in-scale_0.3s_ease-out] p-4">
+            <div className={`relative bg-[var(--bg-secondary)] shadow-2xl rounded-xl overflow-hidden border border-[var(--border-primary)] animate-[spring-up_0.5s_cubic-bezier(0.16,1,0.3,1)]
+                ${expandedWidget.type === 'calculator' ? 'w-[320px] h-[500px]' : 'w-full max-w-2xl h-[80vh]'}
+            `}>
+                 <button 
+                    onClick={() => setExpandedWidget(null)}
+                    className="absolute top-2 right-2 z-50 p-2 rounded-full bg-[var(--bg-primary)] hover:bg-[var(--border-primary)] shadow-md transition-all btn-press"
+                 >
+                     <ArrowsPointingInIcon className="w-5 h-5" />
+                 </button>
+                 
+                 {expandedWidget.type === 'calculator' && (
+                     <CalculatorWidget 
+                        isScientific={true} 
+                        onClose={() => setExpandedWidget(null)} 
+                    />
+                 )}
+                 {expandedWidget.type === 'googlesearch' && (
+                     <GoogleSearchWidget 
+                        data={widgets[expandedWidget.index].data} 
+                        onSearch={(q) => handleSearch(expandedWidget.index, q)}
+                        onChange={(data) => updateWidgetData(expandedWidget.index, data)}
+                     />
+                 )}
+                 {expandedWidget.type === 'chatgpt' && (
+                     <ChatGPTWidget 
+                        data={widgets[expandedWidget.index].data}
+                        onChange={(d) => updateWidgetData(expandedWidget.index, d)}
+                     />
+                 )}
             </div>
         </div>
       )}
@@ -393,7 +458,7 @@ const MediaPanel: React.FC<MediaPanelProps> = ({
                         `}
                     >
                         {/* Background decoration */}
-                        <div className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity bg-[var(--accent)] pointer-events-none"></div>
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-1 transition-opacity bg-[var(--accent)] pointer-events-none"></div>
                         
                         <div className={`p-5 rounded-full transition-all duration-300 ${isDraggingFile ? 'bg-[var(--accent)] text-white scale-110' : 'bg-[var(--bg-primary)] text-[var(--accent)] shadow-sm group-hover:scale-110'}`}>
                             <UploadIcon className="w-12 h-12" />
@@ -446,7 +511,7 @@ const MediaPanel: React.FC<MediaPanelProps> = ({
                 {videoId ? (
                     <iframe
                     className="w-full h-full rounded-lg"
-                    src={`https://www.youtube-nocookie.com/embed/${videoId}`}
+                    src={`https://www.youtube.com/embed/${videoId}`}
                     title="YouTube video player"
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"

@@ -1,69 +1,74 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { InfinityIcon, GoogleIcon, SparklesIcon, LightBulbIcon, TimerIcon, ThemeIcon, PencilIcon, DocumentTextIcon } from './Icons';
+import { InfinityIcon, GoogleIcon, SparklesIcon, LightBulbIcon, TimerIcon, ThemeIcon, PencilIcon, DocumentTextIcon, Squares2X2Icon, HomeIcon } from './Icons';
 import LandingPageBackground from './LandingPageBackground';
+import { User, Theme } from '../types';
 
 interface LandingPageProps {
   onLogin: () => void;
   onOpenJournal: () => void;
+  onOpenWidgets: () => void;
+  user?: User | null;
+  currentTheme: Theme;
+  onSetTheme: (theme: Theme) => void;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onOpenJournal }) => {
-    const [theme, setTheme] = useState<'light' | 'matrix' | 'monokai' | 'pitch-black' | 'frosty'>('light');
-    const scrollRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        document.documentElement.className = theme;
-        return () => {
-            document.documentElement.className = '';
-        }
-    }, [theme]);
+const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onOpenJournal, onOpenWidgets, user, currentTheme, onSetTheme }) => {
+    
+    // We remove the local state and useEffect for theme here because it's handled by the parent (AuthWrapper)
+    // The parent ensures document.documentElement.className is updated.
 
     const cycleTheme = () => {
-        const themes: ('light' | 'matrix' | 'monokai' | 'pitch-black' | 'frosty')[] = ['light', 'frosty', 'matrix', 'monokai', 'pitch-black'];
-        const currentIndex = themes.indexOf(theme);
+        const themes: Theme[] = ['light', 'frosty', 'matrix', 'cyberpunk', 'monokai', 'pitch-black'];
+        const currentIndex = themes.indexOf(currentTheme);
         const nextIndex = (currentIndex + 1) % themes.length;
-        setTheme(themes[nextIndex]);
+        onSetTheme(themes[nextIndex]);
     };
 
     return (
-        <div ref={scrollRef} className="h-screen w-full text-[var(--text-primary)] relative bg-[var(--bg-primary)] transition-colors duration-500 selection:bg-[var(--accent)] selection:text-white overflow-y-auto custom-scrollbar">
+        <div className="h-screen w-full text-[var(--text-primary)] relative bg-[var(--bg-primary)] transition-colors duration-500 selection:bg-[var(--accent)] selection:text-white overflow-y-auto custom-scrollbar">
             
-            {/* Scroll-Synced Background Animation */}
-            <LandingPageBackground scrollContainerRef={scrollRef} />
+            {/* Polygon Morphing Background Animation */}
+            <LandingPageBackground />
 
-            {/* Background Gradients - Fixed so they don't scroll with content */}
+            {/* Background Gradients - Fixed */}
             <div className="fixed inset-0 animated-landing-gradient opacity-30 pointer-events-none"></div>
             <div className="fixed top-[-10%] right-[-5%] w-[600px] h-[600px] bg-[var(--accent)]/10 rounded-full blur-[120px] pointer-events-none animate-pulse" style={{ animationDuration: '8s' }}></div>
             <div className="fixed bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-[var(--success)]/10 rounded-full blur-[100px] pointer-events-none animate-pulse" style={{ animationDuration: '10s' }}></div>
 
             <div className="relative z-10 max-w-7xl mx-auto px-6 flex flex-col min-h-full">
-                {/* Navbar */}
-                <header className="py-6 flex justify-between items-center">
+                {/* Navbar - Changed from header to div to avoid global theme borders */}
+                <div className="py-6 flex justify-between items-center w-full">
                     <div className="flex items-center gap-4">
                         <div className="relative group cursor-default">
-                            {/* Enhanced Logo Container */}
-                            <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent)] to-[var(--success)] rounded-xl blur-md opacity-60 group-hover:opacity-80 transition-opacity duration-500"></div>
-                            <div className="relative p-3 bg-gradient-to-br from-[var(--accent)] to-[var(--success)] rounded-xl shadow-xl text-white transform group-hover:scale-105 transition-transform duration-300">
-                                <InfinityIcon className="w-12 h-12" strokeColor="white" />
+                            {/* Minimalistic Logo Container - Removed Border/Background */}
+                            <div className="relative p-2 flex items-center justify-center transition-all duration-300 group-hover:scale-110">
+                                <InfinityIcon className="w-12 h-12" />
                             </div>
                         </div>
-                        <span className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-primary)] to-[var(--text-secondary)]">Infi-Notes</span>
+                        <div className="px-2"></div>
+                        <span className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-primary)] to-[var(--text-secondary)]">Infi-Notes</span>
                     </div>
                     <div className="flex items-center gap-4">
-                        <button 
-                            onClick={onOpenJournal} 
-                            className="hidden sm:flex items-center gap-2 px-4 py-2 font-semibold text-sm text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] rounded-full transition-all btn-press border border-transparent hover:border-[var(--border-primary)]"
-                        >
-                            <PencilIcon className="w-4 h-4" />
-                            <span>Journal</span>
-                        </button>
-                        <button 
-                            onClick={onLogin} 
-                            className="px-5 py-2 font-semibold text-sm bg-[var(--text-primary)] text-[var(--bg-primary)] rounded-full hover:opacity-90 transition-all btn-press shadow-md"
-                        >
-                            Sign In
-                        </button>
+                        {/* Buttons Removed from Navbar as per request */}
+                        
+                        {user ? (
+                             <div className="flex items-center gap-3">
+                                <div className="hidden md:block text-right">
+                                    <p className="text-xs font-bold">{user.name}</p>
+                                    <p className="text-[10px] text-[var(--text-secondary)]">Logged In</p>
+                                </div>
+                                <img src={user.avatar} alt="Profile" className="w-8 h-8 rounded-full" />
+                             </div>
+                        ) : (
+                            <button 
+                                onClick={onLogin} 
+                                className="px-5 py-2 font-semibold text-sm bg-[var(--text-primary)] text-[var(--bg-primary)] rounded-full hover:opacity-90 transition-all btn-press shadow-md"
+                            >
+                                Sign In
+                            </button>
+                        )}
+
                         <button
                             onClick={cycleTheme}
                             className="p-2 rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--border-primary)] transition-all btn-press ml-2"
@@ -72,7 +77,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onOpenJournal }) => 
                             <ThemeIcon className="w-5 h-5" />
                         </button>
                     </div>
-                </header>
+                </div>
 
                 {/* Hero Section */}
                 <main className="flex-grow flex flex-col items-center justify-center text-center py-20">
@@ -95,8 +100,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onOpenJournal }) => 
                             onClick={onLogin} 
                             className="flex items-center gap-3 px-8 py-4 bg-[var(--accent)] text-white rounded-full font-bold text-lg shadow-lg shadow-[var(--accent)]/30 hover:scale-105 transition-transform btn-press"
                         >
-                            <GoogleIcon className="w-5 h-5" />
-                            <span>Start for Free</span>
+                            {user ? (
+                                <>
+                                    <HomeIcon className="w-5 h-5" />
+                                    <span>Enter Workspace</span>
+                                </>
+                            ) : (
+                                <>
+                                    <GoogleIcon className="w-5 h-5" />
+                                    <span>Start for Free</span>
+                                </>
+                            )}
                         </button>
                         <button 
                             onClick={onOpenJournal} 
@@ -104,6 +118,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onOpenJournal }) => 
                         >
                             <SparklesIcon className="w-5 h-5" />
                             <span>Try Journal</span>
+                        </button>
+                        <button 
+                            onClick={onOpenWidgets} 
+                            className="flex items-center gap-3 px-8 py-4 bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-full font-bold text-lg hover:bg-[var(--border-primary)] transition-all btn-press"
+                        >
+                            <Squares2X2Icon className="w-5 h-5" />
+                            <span>Widgets Board</span>
                         </button>
                     </div>
                 </main>

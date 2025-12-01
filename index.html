@@ -1,4 +1,3 @@
-
 <script type="importmap">
 {
   "imports": {
@@ -20,7 +19,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Orbitron:wght@400;500;700&family=Share+Tech+Mono&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
     <!-- PDF.js for Thumbnail Generation and Rendering -->
@@ -31,64 +30,68 @@
     </script>
     <style>
       :root {
+        /* High Contrast Light Theme */
         --bg-primary: #ffffff;
-        --bg-secondary: #f3f4f6;
-        --text-primary: #111827;
-        --text-secondary: #6b7280;
-        --border-primary: #e5e7eb;
-        --accent: #3b82f6;
-        --notebook-line: #e5e7eb;
+        --bg-secondary: #f1f5f9;
+        --text-primary: #020617;
+        --text-secondary: #475569;
+        --border-primary: #cbd5e1;
+        --accent: #2563eb;
+        --notebook-line: #cbd5e1;
         --notebook-margin: #ef4444;
-        --success: #10b981;
-        --danger: #ef4444;
-        --warning: #f59e0b;
+        --success: #059669;
+        --danger: #dc2626;
+        --warning: #d97706;
+
+        --font-body: 'Inter', sans-serif;
+        --font-heading: 'Inter', sans-serif;
 
         /* Glass Backgrounds */
-        --bg-primary-glass: rgba(255, 255, 255, 0.7);
-        --bg-secondary-glass: rgba(243, 244, 246, 0.7);
+        --bg-primary-glass: rgba(255, 255, 255, 0.9);
+        --bg-secondary-glass: rgba(241, 245, 249, 0.9);
 
         /* Clock Theme */
-        --clock-bg-start: #3b82f6;
-        --clock-bg-end: #10b981;
+        --clock-bg-start: #2563eb;
+        --clock-bg-end: #059669;
         --clock-text: #ffffff;
 
         /* Sidebar Gradient */
-        --sidebar-bg-start: #f9fafb;
-        --sidebar-bg-end: #e5e7eb;
+        --sidebar-bg-start: #f8fafc;
+        --sidebar-bg-end: #e2e8f0;
         
         /* Notebook Gradient */
-        --notebook-gradient-start: #f3f4f6;
-        --notebook-gradient-middle: #e9ecef;
-        --notebook-gradient-end: #dde2e6;
+        --notebook-gradient-start: #f1f5f9;
+        --notebook-gradient-middle: #e2e8f0;
+        --notebook-gradient-end: #cbd5e1;
 
         /* Highlight Colors */
-        --highlight-kp-bg: rgba(59, 130, 246, 0.15);
-        --highlight-ps-bg: rgba(16, 185, 129, 0.15);
-        --highlight-dt-bg: rgba(239, 68, 68, 0.15);
-        --highlight-lc-bg: rgba(249, 115, 22, 0.15);
-        --highlight-kp-text: #2563eb;
-        --highlight-ps-text: #059669;
-        --highlight-dt-text: #dc2626;
-        --highlight-lc-text: #ea580c;
+        --highlight-kp-bg: rgba(37, 99, 235, 0.15);
+        --highlight-ps-bg: rgba(5, 150, 105, 0.15);
+        --highlight-dt-bg: rgba(220, 38, 38, 0.15);
+        --highlight-lc-bg: rgba(234, 88, 12, 0.15);
+        --highlight-kp-text: #1d4ed8;
+        --highlight-ps-text: #047857;
+        --highlight-dt-text: #b91c1c;
+        --highlight-lc-text: #c2410c;
 
         /* Calculator Light Theme */
-        --calc-bg: #f1f2f3;
-        --calc-display-text: #000000;
-        --calc-history-text: #6b7280;
-        --calc-btn-light-gray-bg: #d4d4d2;
-        --calc-btn-light-gray-text: #1c1c1c;
-        --calc-btn-dark-gray-bg: #ffffff;
-        --calc-btn-dark-gray-text: #1c1c1c;
-        --calc-btn-orange-bg: #f1a33c;
+        --calc-bg: #e2e8f0;
+        --calc-display-text: #0f172a;
+        --calc-history-text: #475569;
+        --calc-btn-light-gray-bg: #cbd5e1;
+        --calc-btn-light-gray-text: #0f172a;
+        --calc-btn-dark-gray-bg: #f8fafc;
+        --calc-btn-dark-gray-text: #0f172a;
+        --calc-btn-orange-bg: #ea580c;
         --calc-btn-orange-text: #ffffff;
         
         /* Sci Calc - Light */
-        --calc-sci-bg-start: #f8fafc;
-        --calc-sci-bg-end: #e2e8f0;
-        --calc-sci-text: #1e293b;
+        --calc-sci-bg-start: #f1f5f9;
+        --calc-sci-bg-end: #cbd5e1;
+        --calc-sci-text: #0f172a;
         --calc-sci-btn-num-bg: #ffffff;
-        --calc-sci-btn-num-text: #1e293b;
-        --calc-sci-btn-op-bg: #3b82f6;
+        --calc-sci-btn-num-text: #0f172a;
+        --calc-sci-btn-op-bg: #2563eb;
         --calc-sci-btn-op-text: #ffffff;
         --calc-sci-btn-func-bg: #e0e7ff;
         --calc-sci-btn-func-text: #3730a3;
@@ -96,83 +99,87 @@
         --calc-sci-btn-action-text: #991b1b;
         
         /* Widget Placeholder - Light Theme */
-        --widget-placeholder-c1: #60a5fa;
-        --widget-placeholder-c2: #34d399;
-        --widget-placeholder-c3: #f472b6;
-        --widget-placeholder-c4: #a78bfa;
+        --widget-placeholder-c1: #3b82f6;
+        --widget-placeholder-c2: #10b981;
+        --widget-placeholder-c3: #ec4899;
+        --widget-placeholder-c4: #8b5cf6;
         
         /* AnimeJS Background */
-        --anime-tile-opacity: 0.02;
+        --anime-tile-opacity: 0.05;
 
         /* Landing Page Gradient */
-        --landing-bg-start: #e0f2fe;
-        --landing-bg-middle: #f0f9ff;
-        --landing-bg-end: #dbeafe;
+        --landing-bg-start: #eff6ff;
+        --landing-bg-middle: #f8fafc;
+        --landing-bg-end: #e0f2fe;
       }
+      
       .matrix {
-        /* Transparent backgrounds to let the rain show through */
-        --bg-primary: rgba(2, 2, 2, 0.75);
-        --bg-secondary: rgba(13, 13, 13, 0.65);
+        /* Enhanced Matrix Theme - High Contrast */
+        --bg-primary: #000000;
+        --bg-secondary: rgba(0, 20, 0, 0.85);
         
         --text-primary: #00FF41;
         --text-secondary: #008F11;
-        --border-primary: rgba(0, 59, 0, 0.5);
+        --border-primary: #003B00;
         --accent: #00FF41;
-        --notebook-line: rgba(0, 59, 0, 0.3);
-        --notebook-margin: #ef4444;
+        --notebook-line: #003B00;
+        --notebook-margin: #008F11;
         --success: #00FF41;
         --danger: #F92672;
         --warning: #f59e0b;
 
-        /* Glass Backgrounds Override */
-        --bg-primary-glass: rgba(2, 2, 2, 0.4);
-        --bg-secondary-glass: rgba(13, 13, 13, 0.4);
+        --font-body: 'Share Tech Mono', monospace;
+        --font-heading: 'Share Tech Mono', monospace;
+
+        /* Glass Backgrounds */
+        --bg-primary-glass: rgba(0, 0, 0, 0.9);
+        --bg-secondary-glass: rgba(0, 20, 0, 0.8);
 
         /* Clock Theme */
         --clock-bg-start: #00FF41;
-        --clock-bg-end: #008F11;
-        --clock-text: #020202;
+        --clock-bg-end: #003B00;
+        --clock-text: #000000;
 
-        /* Sidebar Gradient - Transparent */
-        --sidebar-bg-start: rgba(2, 2, 2, 0.6);
-        --sidebar-bg-end: rgba(13, 13, 13, 0.6);
+        /* Sidebar Gradient */
+        --sidebar-bg-start: #000000;
+        --sidebar-bg-end: #001100;
 
-        /* Notebook Gradient - Transparent */
-        --notebook-gradient-start: rgba(13, 13, 13, 0.5);
-        --notebook-gradient-middle: rgba(26, 26, 26, 0.5);
-        --notebook-gradient-end: rgba(13, 13, 13, 0.5);
+        /* Notebook Gradient */
+        --notebook-gradient-start: #000000;
+        --notebook-gradient-middle: #001100;
+        --notebook-gradient-end: #000000;
 
         /* Highlight Colors */
-        --highlight-kp-bg: rgba(0, 255, 65, 0.15);
-        --highlight-ps-bg: rgba(0, 255, 65, 0.15);
+        --highlight-kp-bg: rgba(0, 255, 65, 0.2);
+        --highlight-ps-bg: rgba(0, 143, 17, 0.3);
         --highlight-dt-bg: rgba(249, 38, 114, 0.2);
-        --highlight-lc-bg: rgba(0, 255, 65, 0.15);
-        --highlight-kp-text: #39FF14;
-        --highlight-ps-text: #39FF14;
+        --highlight-lc-bg: rgba(0, 255, 65, 0.1);
+        --highlight-kp-text: #00FF41;
+        --highlight-ps-text: #00FF41;
         --highlight-dt-text: #F92672;
-        --highlight-lc-text: #39FF14;
+        --highlight-lc-text: #00FF41;
 
-        /* Calculator Matrix Theme - Slightly transparent */
-        --calc-bg: rgba(10, 10, 10, 0.9);
+        /* Calculator Matrix Theme */
+        --calc-bg: #000000;
         --calc-display-text: #00FF41;
         --calc-history-text: #008F11;
-        --calc-btn-light-gray-bg: #005F00;
+        --calc-btn-light-gray-bg: #003B00;
         --calc-btn-light-gray-text: #00FF41;
-        --calc-btn-dark-gray-bg: #003B00;
+        --calc-btn-dark-gray-bg: #001A00;
         --calc-btn-dark-gray-text: #00FF41;
-        --calc-btn-orange-bg: #008F11;
+        --calc-btn-orange-bg: #00FF41;
         --calc-btn-orange-text: #000000;
         
         /* Sci Calc - Matrix */
-        --calc-sci-bg-start: rgba(2, 20, 2, 0.95);
-        --calc-sci-bg-end: rgba(0, 0, 0, 0.95);
+        --calc-sci-bg-start: #000000;
+        --calc-sci-bg-end: #001100;
         --calc-sci-text: #00FF41;
-        --calc-sci-btn-num-bg: #003B00;
+        --calc-sci-btn-num-bg: #001A00;
         --calc-sci-btn-num-text: #00FF41;
-        --calc-sci-btn-op-bg: #008F11;
-        --calc-sci-btn-op-text: #000000;
-        --calc-sci-btn-func-bg: #001A00;
-        --calc-sci-btn-func-text: #00FF41;
+        --calc-sci-btn-op-bg: #003B00;
+        --calc-sci-btn-op-text: #00FF41;
+        --calc-sci-btn-func-bg: #000000;
+        --calc-sci-btn-func-text: #008F11;
         --calc-sci-btn-action-bg: #003B00;
         --calc-sci-btn-action-text: #F92672;
         
@@ -180,15 +187,12 @@
         --widget-placeholder-c1: #00FF41;
         --widget-placeholder-c2: #008F11;
         --widget-placeholder-c3: #003B00;
-        --widget-placeholder-c4: #0D0208;
+        --widget-placeholder-c4: #000000;
         
-        /* AnimeJS Background */
-        --anime-tile-opacity: 0.05;
-
         /* Landing Page Gradient */
-        --landing-bg-start: #0D0D0D;
-        --landing-bg-middle: #020202;
-        --landing-bg-end: #1A1A1A;
+        --landing-bg-start: #000000;
+        --landing-bg-middle: #001100;
+        --landing-bg-end: #000000;
       }
       
       .matrix .notebook-container,
@@ -196,22 +200,106 @@
       .matrix aside,
       .matrix .mediapanel-root,
       .matrix .todo-list-card {
-          backdrop-filter: blur(4px);
-          -webkit-backdrop-filter: blur(4px);
-          border: 1px solid rgba(0, 255, 65, 0.15);
-          box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid var(--border-primary);
+          box-shadow: 0 4px 30px rgba(0, 255, 65, 0.1);
       }
       
       .matrix .notebook-textarea {
-          background-color: transparent;
+          background-color: rgba(0,0,0,0.5);
       }
 
-      /* Keep Header clearer at the top */
       .matrix header {
-          background-color: rgba(2, 2, 2, 0.3);
-          backdrop-filter: none; /* Let the rain be seen clearly */
-          border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+          background-color: rgba(0, 0, 0, 0.8);
+          border-bottom: 1px solid var(--border-primary);
           z-index: 50;
+      }
+
+      .cyberpunk {
+        /* Cyberpunk Theme - Neon & Dark */
+        --bg-primary: #050505;
+        --bg-secondary: #0f0f13;
+        --text-primary: #00f3ff;
+        --text-secondary: #ff00ff;
+        --border-primary: #00f3ff;
+        --accent: #ffee00;
+        --notebook-line: #333333;
+        --notebook-margin: #ff00ff;
+        --success: #00ff9f;
+        --danger: #ff0055;
+        --warning: #ffee00;
+
+        --font-body: 'Orbitron', 'Inter', sans-serif;
+        --font-heading: 'Orbitron', sans-serif;
+
+        /* Glass Backgrounds */
+        --bg-primary-glass: rgba(5, 5, 5, 0.9);
+        --bg-secondary-glass: rgba(15, 15, 19, 0.85);
+
+        /* Clock Theme */
+        --clock-bg-start: #ff00ff;
+        --clock-bg-end: #00f3ff;
+        --clock-text: #000000;
+
+        /* Sidebar Gradient */
+        --sidebar-bg-start: #0b0d17;
+        --sidebar-bg-end: #050505;
+
+        /* Notebook Gradient */
+        --notebook-gradient-start: #0f0f13;
+        --notebook-gradient-middle: #1a1a24;
+        --notebook-gradient-end: #0f0f13;
+
+        /* Highlight Colors */
+        --highlight-kp-bg: rgba(0, 243, 255, 0.2);
+        --highlight-ps-bg: rgba(255, 0, 255, 0.2);
+        --highlight-dt-bg: rgba(255, 238, 0, 0.2);
+        --highlight-lc-bg: rgba(0, 255, 159, 0.2);
+        --highlight-kp-text: #00f3ff;
+        --highlight-ps-text: #ff00ff;
+        --highlight-dt-text: #ffee00;
+        --highlight-lc-text: #00ff9f;
+
+        /* Calculator Cyberpunk Theme */
+        --calc-bg: #0a0a0a;
+        --calc-display-text: #ffee00;
+        --calc-history-text: #00f3ff;
+        --calc-btn-light-gray-bg: #1a1a1a;
+        --calc-btn-light-gray-text: #00f3ff;
+        --calc-btn-dark-gray-bg: #050505;
+        --calc-btn-dark-gray-text: #ff00ff;
+        --calc-btn-orange-bg: #ffee00;
+        --calc-btn-orange-text: #000000;
+        
+        /* Sci Calc - Cyberpunk */
+        --calc-sci-bg-start: #0b0d17;
+        --calc-sci-bg-end: #000000;
+        --calc-sci-text: #00f3ff;
+        --calc-sci-btn-num-bg: #121212;
+        --calc-sci-btn-num-text: #00f3ff;
+        --calc-sci-btn-op-bg: #ff00ff;
+        --calc-sci-btn-op-text: #000000;
+        --calc-sci-btn-func-bg: #1a1a1a;
+        --calc-sci-btn-func-text: #ffee00;
+        --calc-sci-btn-action-bg: #000000;
+        --calc-sci-btn-action-text: #ff0055;
+        
+        /* Widget Placeholder - Cyberpunk */
+        --widget-placeholder-c1: #ff00ff;
+        --widget-placeholder-c2: #00f3ff;
+        --widget-placeholder-c3: #ffee00;
+        --widget-placeholder-c4: #00ff9f;
+        
+        /* Landing Page Gradient */
+        --landing-bg-start: #050505;
+        --landing-bg-middle: #120024;
+        --landing-bg-end: #001224;
+      }
+
+      .cyberpunk header, .cyberpunk aside, .cyberpunk .notebook-container, .cyberpunk .widget-container {
+          border: 1px solid var(--border-primary);
+          box-shadow: 0 0 10px rgba(0, 243, 255, 0.3), inset 0 0 5px rgba(0, 243, 255, 0.1);
       }
 
       .monokai {
@@ -226,6 +314,9 @@
         --success: #A6E22E;
         --danger: #F92672;
         --warning: #f59e0b;
+
+        --font-body: 'Source Code Pro', monospace;
+        --font-heading: 'Source Code Pro', monospace;
         
         /* Glass Backgrounds */
         --bg-primary-glass: rgba(39, 40, 34, 0.6);
@@ -307,6 +398,9 @@
           --danger: #ef4444;
           --warning: #f59e0b;
 
+          --font-body: 'Inter', sans-serif;
+          --font-heading: 'Inter', sans-serif;
+
           /* Glass Backgrounds */
           --bg-primary-glass: rgba(0, 0, 0, 0.4);
           --bg-secondary-glass: rgba(26, 26, 26, 0.4);
@@ -375,113 +469,138 @@
       }
 
       .frosty {
-        --bg-primary: rgba(255, 255, 255, 0.3);
-        --bg-secondary: rgba(255, 255, 255, 0.5);
-        --text-primary: #374151;
-        --text-secondary: #6b7280;
-        --border-primary: rgba(255, 255, 255, 0.6);
-        --accent: #8b5cf6; /* Soft Purple */
-        --notebook-line: rgba(0, 0, 0, 0.1);
-        --notebook-margin: #ef4444;
-        --success: #10b981;
-        --danger: #ef4444;
-        --warning: #f59e0b;
+        /* Brighter, Lighter Palette - Liquid Glass Base */
+        --bg-primary: rgba(255, 255, 255, 0.6); /* High transparency for body */
+        --bg-secondary: rgba(255, 255, 255, 0.4);
+        --text-primary: #0284c7; /* Sky 600 - brighter blue text */
+        --text-secondary: #475569; /* Slate 600 */
+        --border-primary: rgba(255, 255, 255, 0.9);
+        --accent: #38bdf8; /* Sky 400 - bright cyan/blue */
+        --notebook-line: rgba(56, 189, 248, 0.2);
+        --notebook-margin: #7dd3fc;
+        --success: #22d3ee;
+        --danger: #fb7185;
+        --warning: #facc15;
 
-        /* Glass Backgrounds */
-        --bg-primary-glass: rgba(255, 255, 255, 0.3);
-        --bg-secondary-glass: rgba(255, 255, 255, 0.5);
+        --font-body: 'Inter', sans-serif;
+        --font-heading: 'Inter', sans-serif;
 
-        /* Clock Theme - Pastel Gradient */
-        --clock-bg-start: #8b5cf6;
-        --clock-bg-end: #3b82f6;
-        --clock-text: #ffffff;
+        /* Glass Backgrounds - Ultra clear/frosted */
+        --bg-primary-glass: rgba(255, 255, 255, 0.75);
+        --bg-secondary-glass: rgba(255, 255, 255, 0.55);
+
+        /* Clock Theme - Icy Bright */
+        --clock-bg-start: #e0f2fe;
+        --clock-bg-end: #ffffff;
+        --clock-text: #0ea5e9;
 
         /* Sidebar Gradient */
-        --sidebar-bg-start: rgba(255, 255, 255, 0.4);
-        --sidebar-bg-end: rgba(255, 255, 255, 0.2);
+        --sidebar-bg-start: rgba(255, 255, 255, 0.6);
+        --sidebar-bg-end: rgba(255, 255, 255, 0.3);
 
         /* Notebook Gradient */
-        --notebook-gradient-start: rgba(255, 255, 255, 0.4);
-        --notebook-gradient-middle: rgba(255, 255, 255, 0.6);
-        --notebook-gradient-end: rgba(255, 255, 255, 0.4);
+        --notebook-gradient-start: rgba(255, 255, 255, 0.6);
+        --notebook-gradient-middle: rgba(255, 255, 255, 0.8);
+        --notebook-gradient-end: rgba(255, 255, 255, 0.6);
 
-        /* Highlight Colors - Soft Pastels */
-        --highlight-kp-bg: rgba(139, 92, 246, 0.2);
-        --highlight-ps-bg: rgba(59, 130, 246, 0.2);
-        --highlight-dt-bg: rgba(244, 63, 94, 0.2);
-        --highlight-lc-bg: rgba(245, 158, 11, 0.2);
-        --highlight-kp-text: #6d28d9;
-        --highlight-ps-text: #1d4ed8;
-        --highlight-dt-text: #be123c;
-        --highlight-lc-text: #b45309;
+        /* Highlight Colors - Icy */
+        --highlight-kp-bg: rgba(56, 189, 248, 0.15);
+        --highlight-ps-bg: rgba(34, 211, 238, 0.15);
+        --highlight-dt-bg: rgba(251, 113, 133, 0.15);
+        --highlight-lc-bg: rgba(250, 204, 21, 0.15);
+        --highlight-kp-text: #0284c7;
+        --highlight-ps-text: #0891b2;
+        --highlight-dt-text: #e11d48;
+        --highlight-lc-text: #d97706;
 
-        /* Calculator Frosty Theme */
+        /* Calculator Frosty Theme - Brighter */
         --calc-bg: rgba(255, 255, 255, 0.6);
-        --calc-display-text: #374151;
-        --calc-history-text: #6b7280;
+        --calc-display-text: #0284c7;
+        --calc-history-text: #64748b;
         --calc-btn-light-gray-bg: rgba(255, 255, 255, 0.5);
-        --calc-btn-light-gray-text: #374151;
-        --calc-btn-dark-gray-bg: rgba(255, 255, 255, 0.8);
-        --calc-btn-dark-gray-text: #374151;
-        --calc-btn-orange-bg: #8b5cf6;
+        --calc-btn-light-gray-text: #0c4a6e;
+        --calc-btn-dark-gray-bg: rgba(255, 255, 255, 0.7);
+        --calc-btn-dark-gray-text: #0c4a6e;
+        --calc-btn-orange-bg: #38bdf8;
         --calc-btn-orange-text: #ffffff;
 
-        /* Sci Calc - Frosty */
-        --calc-sci-bg-start: rgba(255, 255, 255, 0.7);
-        --calc-sci-bg-end: rgba(245, 243, 255, 0.7);
-        --calc-sci-text: #374151;
+        /* Sci Calc - Frosty Bright */
+        --calc-sci-bg-start: rgba(255, 255, 255, 0.8);
+        --calc-sci-bg-end: rgba(240, 249, 255, 0.8);
+        --calc-sci-text: #0369a1;
         --calc-sci-btn-num-bg: rgba(255, 255, 255, 0.9);
-        --calc-sci-btn-num-text: #374151;
-        --calc-sci-btn-op-bg: #8b5cf6;
+        --calc-sci-btn-num-text: #0369a1;
+        --calc-sci-btn-op-bg: #38bdf8;
         --calc-sci-btn-op-text: #ffffff;
-        --calc-sci-btn-func-bg: rgba(237, 233, 254, 0.8);
-        --calc-sci-btn-func-text: #6d28d9;
+        --calc-sci-btn-func-bg: rgba(224, 242, 254, 0.8);
+        --calc-sci-btn-func-text: #0284c7;
         --calc-sci-btn-action-bg: rgba(254, 226, 226, 0.8);
         --calc-sci-btn-action-text: #be123c;
 
-        /* Widget Placeholder - Pastel Rainbow */
-        --widget-placeholder-c1: #8b5cf6;
-        --widget-placeholder-c2: #3b82f6;
-        --widget-placeholder-c3: #10b981;
-        --widget-placeholder-c4: #f43f5e;
+        /* Widget Placeholder - Frosty Bright */
+        --widget-placeholder-c1: #38bdf8;
+        --widget-placeholder-c2: #22d3ee;
+        --widget-placeholder-c3: #60a5fa;
+        --widget-placeholder-c4: #818cf8;
 
-        /* Landing Page Gradient */
-        --landing-bg-start: #ede9fe;
-        --landing-bg-middle: #f3e8ff;
+        /* Landing Page Gradient - Very Light */
+        --landing-bg-start: #f0f9ff;
+        --landing-bg-middle: #e0f2fe;
         --landing-bg-end: #dbeafe;
       }
 
+      /* Enhanced Glassmorphism for Containers - Liquid Glass Look */
       .frosty .notebook-container,
       .frosty .widget-container,
       .frosty aside,
       .frosty .mediapanel-root,
       .frosty .todo-list-card,
       .frosty header {
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border: 1px solid rgba(255, 255, 255, 0.6);
-          box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+          backdrop-filter: blur(30px) saturate(180%);
+          -webkit-backdrop-filter: blur(30px) saturate(180%);
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.3) 100%);
+          border: 1px solid rgba(255, 255, 255, 0.95);
+          box-shadow: 
+            0 10px 40px rgba(0, 0, 0, 0.05),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.6), /* Sharper inner rim */
+            inset 0 0 20px rgba(255, 255, 255, 0.5); /* Thick glass glow */
+      }
+      
+      /* Frosty Header Specifics to keep it legible */
+      .frosty header {
+          background: linear-gradient(to right, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.65));
+      }
+
+      /* Exception for Loading Screen in Frosty to be SOLID/OPAQUE */
+      .frosty .loading-screen-exit {
+          background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%) !important;
+          opacity: 1 !important;
+          backdrop-filter: none !important;
       }
       
       /* Global Smooth Theme Transition - Optimized */
       *, *::before, *::after {
         transition-property: background-color, border-color, color, fill, stroke, box-shadow, text-decoration-color;
-        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); /* Standard ease-in-out */
+        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
         transition-duration: 300ms;
       }
 
       /* Exception for elements that are transformed/animated by JS to prevent jank */
       .tile, .dot, .strobe-tile, .floating-shape {
-         transition: opacity 0.5s ease; /* Only transition opacity for background effects */
+         transition: opacity 0.5s ease;
       }
 
       body {
-        font-family: 'Inter', sans-serif;
+        font-family: var(--font-body);
         background-color: var(--bg-primary);
         color: var(--text-primary);
         margin: 0;
         padding: 0;
         overflow: hidden;
+      }
+      
+      h1, h2, h3, h4, h5, h6 {
+          font-family: var(--font-heading);
       }
       
       .font-journal {
@@ -503,8 +622,9 @@
       }
       
       html.has-wallpaper .notebook-textarea pre,
-      .matrix .notebook-textarea pre {
-        background-color: var(--bg-primary-glass);
+      .matrix .notebook-textarea pre,
+      .cyberpunk .notebook-textarea pre {
+        background-color: var(--bg-primary);
       }
 
       .notebook-title-input {
@@ -537,6 +657,7 @@
         color: var(--text-primary);
         z-index: 1;
         flex-grow: 1;
+        font-family: var(--font-body);
       }
       .notebook-textarea p, .notebook-textarea div, .notebook-textarea li {
           line-height: 2rem;
@@ -633,6 +754,28 @@
       @keyframes popIn {
         from { opacity: 0; transform: scale(0.95) translateY(10px); }
         to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      
+      /* New Seamless Spring Animations */
+      @keyframes spring-up {
+        0% { opacity: 0; transform: scale(0.85) translateY(30px); }
+        60% { opacity: 1; transform: scale(1.03) translateY(-5px); }
+        80% { transform: scale(0.98) translateY(2px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      
+      @keyframes fade-in-scale {
+        0% { opacity: 0; backdrop-filter: blur(0px); }
+        100% { opacity: 1; backdrop-filter: blur(4px); }
+      }
+      
+      /* Message Entrance Animation for Chat */
+      @keyframes messageSlideUp {
+        0% { opacity: 0; transform: translateY(10px) scale(0.95); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .message-enter {
+        animation: messageSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       }
 
       @keyframes gradient-animation {
@@ -820,9 +963,14 @@
           animation: flash-red 0.5s ease-in-out infinite;
       }
       
-      /* Widget gradients */
+      /* Widget gradients - Enhanced subtlety using color-mix */
       .animated-gradient-placeholder {
-          background: linear-gradient(135deg, var(--widget-placeholder-c1, #60a5fa), var(--widget-placeholder-c2, #34d399), var(--widget-placeholder-c3, #f472b6), var(--widget-placeholder-c4, #a78bfa));
+          background: linear-gradient(135deg, 
+            color-mix(in srgb, var(--widget-placeholder-c1, #60a5fa), transparent 70%), 
+            color-mix(in srgb, var(--widget-placeholder-c2, #34d399), transparent 70%), 
+            color-mix(in srgb, var(--widget-placeholder-c3, #f472b6), transparent 70%), 
+            color-mix(in srgb, var(--widget-placeholder-c4, #a78bfa), transparent 70%)
+          );
           background-size: 400% 400%;
           animation: gradient-animation 3s ease infinite;
           padding: 3px; 
@@ -879,6 +1027,12 @@
       ::view-transition-old(root),
       ::view-transition-new(root) {
         animation-duration: 0.3s;
+      }
+      
+      ::view-transition-group(notebook-section),
+      ::view-transition-group(media-section) {
+          animation-duration: 0.6s;
+          animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
       }
 
       /* Button Animations */
@@ -943,6 +1097,57 @@
           stroke-dasharray: 20 80; /* Glowing segment (20px) followed by gap (80px) */
           stroke-dashoffset: 0;
           animation: infinity-flow 2s linear infinite; /* Continuous flow */
+      }
+      
+      /* Writing Pen Animation */
+      .writing-pen {
+          position: fixed;
+          pointer-events: none;
+          z-index: 9999;
+          transition: opacity 0.2s ease-out;
+          opacity: 0;
+          width: 40px;
+          height: 40px;
+          /* Ensure no transition on top/left to avoid lag */
+          will-change: top, left, opacity;
+      }
+      .writing-pen.active {
+          opacity: 1;
+      }
+      .writing-pen img {
+          width: 100%;
+          height: 100%;
+          filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.3));
+          /* Rotate slightly to look like holding a pen */
+          transform: rotate(-15deg);
+      }
+      
+      /* New animations for loading screen */
+      @keyframes color-shift {
+          0% { stop-color: var(--accent); }
+          50% { stop-color: var(--success); }
+          100% { stop-color: var(--accent); }
+      }
+      
+      @keyframes zoom-out-exit {
+          0% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(0.5); opacity: 0; }
+      }
+      
+      /* Make sure background animation is visible in loading screen */
+      .loading-screen-exit .pulsing-dots-background {
+          z-index: -1 !important;
+          opacity: 0.5;
+      }
+
+      /* News Widget Transition Animation */
+      @keyframes slideFadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+      
+      .animate-slide-fade {
+          animation: slideFadeIn 0.3s ease-out forwards;
       }
 
     </style>

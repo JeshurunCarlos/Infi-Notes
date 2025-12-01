@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Modal from './Modal';
-import { UploadIcon, CloseIcon, DocumentTextIcon, TrashIcon, PlusIcon, ChevronLeftIcon, ChevronRightIcon, MagnifyingGlassIcon } from './Icons';
+import { UploadIcon, CloseIcon, DocumentTextIcon, TrashIcon, PlusIcon, ChevronLeftIcon, ChevronRightIcon, MagnifyingGlassIcon, BookOpenIcon } from './Icons';
 
 export interface PdfFile {
     id: string;
@@ -139,14 +139,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ isOpen, onClose, library, onAddTo
     };
 
     const addHighlight = () => {
-        // This is a simplified highlighter. 
-        // A robust one requires complex range-to-viewport coordinate mapping logic which is quite extensive.
-        // For this demo, we mock visual persistence by overlaying the current selection rect.
-        // Real implementation would parse PDF text coordinates.
         if (selectionRect && textLayerRef.current) {
-            const containerRect = textLayerRef.current.getBoundingClientRect();
-            // Approximating the highlight rect based on the selection menu position
-            // In a real app, use range.getClientRects() and map relative to viewport
             alert("Highlighting requires advanced coordinate mapping logic (out of scope for this demo).");
         }
         setSelectionRect(null);
@@ -202,6 +195,18 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ isOpen, onClose, library, onAddTo
         if (e.dataTransfer.files) handleFiles(e.dataTransfer.files);
     };
 
+    // Helper to render shelf rows
+    const renderShelfRow = (items: React.ReactNode[], rowIndex: number) => (
+        <div key={rowIndex} className="relative mb-8 pt-4 px-4">
+            <div className="flex gap-6 sm:gap-8 overflow-x-auto pb-4 items-end min-h-[180px] z-10 relative">
+                {items}
+            </div>
+            {/* Shelf Graphic */}
+            <div className="absolute bottom-0 left-0 right-0 h-4 bg-[#e2e8f0] border-t border-[#cbd5e1] shadow-md z-0 transform skew-x-12 origin-bottom-left"></div>
+            <div className="absolute bottom-[-10px] left-0 right-0 h-3 bg-[#cbd5e1]/50 blur-sm z-[-1]"></div>
+        </div>
+    );
+
     return (
         <Modal isOpen={isOpen} onClose={() => { setCurrentPdf(null); onClose(); }} title={currentPdf ? currentPdf.name : "PDF Library"} size="full">
             <div className="h-full flex flex-col">
@@ -233,7 +238,6 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ isOpen, onClose, library, onAddTo
                                 <canvas ref={canvasRef} className="block" />
                                 <div ref={textLayerRef} className="pdf-text-layer" />
                                 
-                                {/* Floating Context Menu */}
                                 {selectionRect && (
                                     <div 
                                         className="absolute z-50 flex gap-1 p-1 bg-[var(--bg-secondary)] rounded-lg shadow-xl border border-[var(--border-primary)] animate-[popIn_0.1s_ease-out]"
@@ -252,53 +256,82 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ isOpen, onClose, library, onAddTo
                         </div>
                     </div>
                 ) : (
-                    /* Library View */
-                    <div className="flex flex-col h-full">
-                         <div 
-                            onClick={() => fileInputRef.current?.click()}
+                    /* Library Bookshelf View */
+                    <div className="flex flex-col h-full bg-[var(--bg-secondary)] rounded-lg overflow-hidden relative">
+                        <input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" multiple onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+                        
+                        <div 
+                            className="flex-grow overflow-y-auto custom-scrollbar p-8"
                             onDragOver={onDragOver}
                             onDragLeave={onDragLeave}
                             onDrop={onDrop}
-                            className={`flex-shrink-0 w-full p-8 mb-6 flex flex-col items-center justify-center border-2 border-dashed rounded-xl transition-all cursor-pointer group
-                                ${isDragging 
-                                    ? 'border-[var(--accent)] bg-[var(--highlight-kp-bg)] scale-[1.01]' 
-                                    : 'border-[var(--border-primary)] bg-[var(--bg-secondary)] hover:border-[var(--accent)] hover:bg-[var(--bg-primary)]'
-                                }`
-                            }
                         >
-                            <div className={`p-4 rounded-full bg-[var(--bg-primary)] mb-3 transition-transform group-hover:scale-110 ${isDragging ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)] group-hover:text-[var(--accent)]'}`}>
-                                <UploadIcon className="w-8 h-8" />
-                            </div>
-                            <p className="text-lg font-bold mb-1">Add PDF Files</p>
-                            <p className="text-sm text-[var(--text-secondary)]">Drag & Drop or Click to Browse</p>
-                            <input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" multiple onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-                        </div>
-
-                        <div className="flex-grow overflow-y-auto custom-scrollbar">
-                            {library.length === 0 ? (
-                                <div className="text-center text-[var(--text-secondary)] mt-12 opacity-60">
-                                    <DocumentTextIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                                    <p>Your library is empty.</p>
+                            {/* Render Library Items on Shelves */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-16 gap-x-8">
+                                
+                                {/* 1. Add PDF Button (Always first) */}
+                                <div 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className={`group relative flex flex-col justify-end cursor-pointer h-full min-h-[180px] w-full max-w-[140px] mx-auto transition-transform hover:-translate-y-2 duration-300 ${isDragging ? 'scale-105' : ''}`}
+                                >
+                                    <div className={`relative z-10 w-full aspect-[3/4] bg-[var(--bg-primary)] rounded-r-sm shadow-md border-2 border-dashed ${isDragging ? 'border-[var(--accent)] bg-[var(--highlight-kp-bg)]' : 'border-[var(--border-primary)] group-hover:border-[var(--accent)]'} flex flex-col items-center justify-center p-4 transition-colors`}>
+                                        <div className="p-3 rounded-full bg-[var(--bg-secondary)] mb-2 group-hover:scale-110 transition-transform">
+                                            <UploadIcon className="w-6 h-6 text-[var(--accent)]" />
+                                        </div>
+                                        <span className="text-[10px] font-bold text-[var(--text-secondary)] text-center uppercase tracking-wide">Add PDF</span>
+                                    </div>
+                                    <div className="absolute bottom-[2px] left-2 right-2 h-2 bg-black/10 blur-sm rounded-full opacity-0 group-hover:opacity-40 transition-opacity"></div>
                                 </div>
-                            ) : (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 p-2">
-                                    {library.map((pdf) => (
-                                        <div key={pdf.id} onClick={() => setCurrentPdf(pdf)} className="group relative flex flex-col gap-2 cursor-pointer">
-                                            <div className="aspect-[1/1.4] bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all relative">
+
+                                {/* 2. Library Items */}
+                                {library.map((pdf) => (
+                                    <div key={pdf.id} onClick={() => setCurrentPdf(pdf)} className="group relative flex flex-col justify-end cursor-pointer h-full min-h-[180px] w-full max-w-[140px] mx-auto hover:-translate-y-2 transition-transform duration-300">
+                                        {/* Book Body */}
+                                        <div className="relative z-10 aspect-[3/4] w-full bg-white rounded-r-sm shadow-lg origin-bottom-left overflow-hidden" style={{
+                                            boxShadow: '-1px 0 2px rgba(0,0,0,0.1), 4px 4px 12px rgba(0,0,0,0.15)'
+                                        }}>
+                                            {/* Spine */}
+                                            <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-gray-300 to-gray-100 rounded-l-sm z-20 border-r border-black/5"></div>
+                                            
+                                            {/* Cover */}
+                                            <div className="absolute inset-0 pl-3 h-full w-full bg-[var(--bg-primary)]">
                                                 {pdf.thumbnail ? (
                                                     <img src={pdf.thumbnail} alt={pdf.name} className="w-full h-full object-cover" />
                                                 ) : (
-                                                    <div className="w-full h-full flex items-center justify-center bg-[var(--bg-secondary)]">
-                                                        <DocumentTextIcon className="w-12 h-12 text-[var(--text-secondary)] opacity-50" />
+                                                    <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center bg-[var(--bg-secondary)]">
+                                                        <BookOpenIcon className="w-8 h-8 text-[var(--text-secondary)] opacity-50 mb-2" />
+                                                        <span className="text-[9px] text-[var(--text-secondary)] font-medium line-clamp-3 leading-tight">{pdf.name}</span>
                                                     </div>
                                                 )}
-                                                <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                                {/* Gloss */}
+                                                <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-black/5 pointer-events-none"></div>
                                             </div>
-                                            <p className="text-xs font-semibold text-center truncate px-1 text-[var(--text-primary)]" title={pdf.name}>{pdf.name}</p>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+                                        
+                                        {/* Shadow on Shelf */}
+                                        <div className="absolute bottom-[-5px] left-2 right-2 h-3 bg-black/20 blur-md rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                                        {/* Title Tooltip */}
+                                        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-30 max-w-[150px] truncate">
+                                            {pdf.name}
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {/* 3. Empty Slot Fillers (To maintain grid look) */}
+                                {Array.from({ length: Math.max(0, 9 - library.length) }).map((_, i) => (
+                                    <div key={`empty-${i}`} className="w-full max-w-[140px] mx-auto h-full min-h-[180px] flex items-end opacity-20 pointer-events-none">
+                                        <div className="w-full h-2 bg-[var(--border-primary)] rounded-full"></div>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            {/* Shelf Lines Background */}
+                            <div className="absolute inset-0 z-[-1] pointer-events-none" style={{
+                                backgroundImage: `linear-gradient(to bottom, transparent 95%, var(--border-primary) 95%)`,
+                                backgroundSize: '100% 240px', // Adjust based on grid row height
+                                backgroundPosition: '0 30px'
+                            }}></div>
                         </div>
                     </div>
                 )}

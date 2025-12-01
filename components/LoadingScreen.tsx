@@ -23,41 +23,41 @@ const LoadingScreen: React.FC = () => {
     }, []);
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-[var(--bg-primary)] text-[var(--text-primary)] flex flex-col items-center justify-center overflow-hidden transition-colors duration-500">
+        <div className="fixed inset-0 z-[9999] bg-[var(--bg-primary)] text-[var(--text-primary)] flex flex-col items-center justify-center overflow-hidden transition-colors duration-500 loading-screen-exit">
             {/* Decorative Background Blobs */}
-            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[var(--accent)]/10 rounded-full blur-[100px] animate-pulse" style={{ animationDuration: '4s' }}></div>
-            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[var(--success)]/10 rounded-full blur-[100px] animate-pulse" style={{ animationDuration: '5s', animationDelay: '1s' }}></div>
+            <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-[var(--accent)]/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '4s' }}></div>
+            <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[var(--success)]/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '5s', animationDelay: '1s' }}></div>
 
-            <div className="relative z-10 flex flex-col items-center">
-                {/* Custom Zen Loader */}
-                <div className="relative w-32 h-32 mb-12">
+            <div className="relative z-10 flex flex-col items-center scale-110">
+                {/* Custom Zen Loader - Enlarged */}
+                <div className="relative w-64 h-64 mb-16">
                     {/* Outer Rotating Ring */}
-                    <div className="absolute inset-0 border-2 border-[var(--border-primary)] rounded-full"></div>
-                    <div className="absolute inset-0 border-t-2 border-[var(--accent)] rounded-full animate-spin" style={{ animationDuration: '1.5s' }}></div>
+                    <div className="absolute inset-0 border-4 border-[var(--border-primary)] rounded-full"></div>
+                    <div className="absolute inset-0 border-t-4 border-[var(--accent)] rounded-full animate-spin" style={{ animationDuration: '1.5s' }}></div>
                     
                     {/* Inner Breathing Circle */}
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-20 h-20 bg-[var(--bg-secondary)] rounded-full shadow-xl flex items-center justify-center border border-[var(--border-primary)] animate-pulse" style={{ animationDuration: '2s' }}>
-                            <InfinityIcon className="w-10 h-10 text-[var(--accent)] opacity-80" />
+                        <div className="w-48 h-48 bg-[var(--bg-secondary)] rounded-full shadow-2xl flex items-center justify-center border border-[var(--border-primary)] animate-pulse" style={{ animationDuration: '2s' }}>
+                            <InfinityIcon className="w-24 h-24 text-[var(--accent)] opacity-80" />
                         </div>
                     </div>
                 </div>
 
                 {/* Title */}
-                <h1 className="font-journal text-5xl font-bold tracking-tight mb-6 animate-[popIn_0.8s_cubic-bezier(0.16,1,0.3,1)]">
+                <h1 className="font-journal text-6xl font-bold tracking-tight mb-8 animate-[popIn_0.8s_cubic-bezier(0.16,1,0.3,1)] text-[var(--text-primary)]">
                     Infi-Notes
                 </h1>
 
                 {/* Quote */}
-                <div className="max-w-md text-center px-6">
-                    <p className="text-sm font-medium text-[var(--text-secondary)] italic leading-relaxed animate-[fadeIn_1s_ease-out_0.3s_both]">
+                <div className="max-w-xl text-center px-6">
+                    <p className="text-lg font-medium text-[var(--text-secondary)] italic leading-relaxed animate-[fadeIn_1s_ease-out_0.3s_both]">
                         "{quote}"
                     </p>
                 </div>
             </div>
             
             {/* Loading Indicator Text */}
-            <div className="absolute bottom-12 text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-50 animate-pulse">
+            <div className="absolute bottom-16 text-xs font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)] opacity-50 animate-pulse">
                 Loading Workspace...
             </div>
         </div>

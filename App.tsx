@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { InfinityIcon, SunIcon, NoSymbolIcon, ImageIcon, ThemeIcon, FocusIcon, QuestionMarkCircleIcon, DocumentTextIcon, LogoutIcon, ChevronDownIcon, ArrowsRightLeftIcon } from './components/Icons';
+import { flushSync } from 'react-dom';
+import { InfinityIcon, ThemeIcon, FocusIcon, QuestionMarkCircleIcon, DocumentTextIcon, LogoutIcon, ChevronDownIcon, ArrowsRightLeftIcon, Squares2X2Icon, HomeIcon } from './components/Icons';
 import Notebook from './components/Notebook';
 import MediaPanel from './components/MediaPanel';
-import { generateHighlightedSummary, generateQuizFromNotes, performGoogleSearch, lookupDictionary } from './lib/ai';
+import { generateHighlightedSummary, generateQuizFromNotes, lookupDictionary } from './lib/ai';
 import BrightnessSlider from './components/BrightnessSlider';
 import Modal from './components/Modal';
 import QuizView, { Question } from './components/QuizView';
@@ -13,43 +14,9 @@ import Sidebar from './components/Sidebar';
 import { generateThemeFromImage, DynamicTheme } from './lib/colorExtractor';
 import ShortcutHelp from './components/ShortcutHelp';
 import PdfViewer, { PdfFile } from './components/PdfViewer';
-import { User, Theme } from './types';
-import AnimeBackground from './components/AnimeBackground';
-import PulsingDotsAnimation from './components/PulsingDotsAnimation';
-import GridStrobeAnimation from './components/GridStrobeAnimation';
-import FloatingShapesAnimation from './components/FloatingShapesAnimation';
-import MatrixRainAnimation from './components/MatrixRainAnimation';
-import FallingLeavesAnimation from './components/FallingLeavesAnimation';
-
-
-export type WidgetType = 'empty' | 'pomodoro' | 'image' | 'hyperlink' | 'calculator' | 'selecting' | 'stickynote' | 'music' | 'spotify' | 'todolist' | 'terminal' | 'googlesearch' | 'snake' | 'dictionary' | 'zipgame' | 'tictactoe';
-export type BackgroundAnimationType = 'none' | 'floatingTiles' | 'pulsingDots' | 'gridStrobe' | 'floatingShapes' | 'matrixRain' | 'fallingLeaves';
-
-export interface WidgetState {
-  type: WidgetType;
-  data?: any;
-  isBgToggled?: boolean;
-}
-
-export interface ToDoItem {
-  id: string;
-  text: string;
-  completed: boolean;
-  status: 'todo' | 'doing' | 'done'; // Added for Kanban support
-}
-
-export interface NotePage {
-  id: string;
-  title: string;
-  content: string;
-  parentId: string | null;
-  order: number;
-  todos: ToDoItem[];
-  isFolder?: boolean;
-  icon?: string; // Emoji or icon char
-  coverImage?: string; // URL for cover image
-  tags?: string[]; // Array of tags
-}
+import SettingsModal from './components/SettingsModal';
+import { User, Theme, WidgetType, WidgetState, ToDoItem, NotePage } from './types';
+import { GlobalBackgroundAnimation } from './components/GlobalBackgroundAnimation';
 
 const PAGES_STORAGE_KEY_BASE = 'zen-notes-pages-v2';
 const WALLPAPER_STORAGE_KEY_BASE = 'zen-notes-wallpaper';
@@ -65,22 +32,12 @@ interface AppProps {
   onLogout: () => void;
   theme: Theme;
   setTheme: (theme: Theme) => void;
+  onOpenWidgets: () => void;
+  onGoHome: () => void;
+  onUpdateUser: (user: User) => void;
 }
 
-const GlobalBackgroundAnimation = ({ animationType }: { animationType: BackgroundAnimationType }) => {
-    return (
-        <div className="fixed inset-0 z-[-1] pointer-events-none">
-            {animationType === 'floatingTiles' && <AnimeBackground />}
-            {animationType === 'pulsingDots' && <PulsingDotsAnimation />}
-            {animationType === 'gridStrobe' && <GridStrobeAnimation />}
-            {animationType === 'floatingShapes' && <FloatingShapesAnimation />}
-            {animationType === 'matrixRain' && <MatrixRainAnimation />}
-            {animationType === 'fallingLeaves' && <FallingLeavesAnimation />}
-        </div>
-    );
-};
-
-function App({ user, onLogout, theme, setTheme }: AppProps) {
+function App({ user, onLogout, theme, setTheme, onOpenWidgets, onGoHome, onUpdateUser }: AppProps) {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryContent, setSummaryContent] = useState<string | null>(null);
 
@@ -109,7 +66,7 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
   const [pages, setPages] = useState<NotePage[]>([]);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [backgroundAnimation, setBackgroundAnimation] = useState<BackgroundAnimationType>('none');
+  const [backgroundAnimation, setBackgroundAnimation] = useState<string>('none');
   const notebookEditorRef = useRef<HTMLDivElement>(null);
   
   // Tagging System State
@@ -133,11 +90,13 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
   // Zen Mode
   const [isZenMode, setIsZenMode] = useState(false);
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Global state
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   const [isLayoutSwapped, setIsLayoutSwapped] = useState(false);
+  const [isSwapping, setIsSwapping] = useState(false);
 
   // PDF Library State (Lifted)
   const [pdfLibrary, setPdfLibrary] = useState<PdfFile[]>([]);
@@ -261,54 +220,6 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
       const savedPages = localStorage.getItem(PAGES_STORAGE_KEY);
       if (savedPages) {
         let parsedPages: NotePage[] = JSON.parse(savedPages);
-        
-        // Migration for older data structures
-        let needsSave = false;
-        parsedPages.forEach(p => {
-            if (p.order === undefined) {
-                needsSave = true;
-            }
-             if (!p.todos) {
-                p.todos = [];
-                needsSave = true;
-            }
-            // Migrate todos to have status
-            p.todos.forEach(t => {
-                if (!t.status) {
-                    t.status = t.completed ? 'done' : 'todo';
-                    needsSave = true;
-                }
-            });
-
-             if (!p.content.startsWith('<')) {
-                // Migrate plain text to HTML
-                p.content = `<p>${p.content.replace(/\n/g, '</p><p>')}</p>`;
-                needsSave = true;
-            }
-            if (!p.icon) p.icon = undefined; // Ensure property exists
-            if (!p.coverImage) p.coverImage = undefined;
-            if (!p.tags) {
-                p.tags = [];
-                needsSave = true;
-            }
-        });
-
-        if (needsSave) {
-            const pagesByParent = new Map<string | null, NotePage[]>();
-            parsedPages.forEach(p => {
-                const parentKey = p.parentId || null;
-                if (!pagesByParent.has(parentKey)) {
-                    pagesByParent.set(parentKey, []);
-                }
-                pagesByParent.get(parentKey)!.push(p);
-            });
-            pagesByParent.forEach((children) => {
-                children.forEach((child, index) => {
-                    child.order = index;
-                });
-            });
-        }
-
         if (parsedPages.length > 0) {
             setPages(parsedPages);
             const firstTopLevelPage = parsedPages.find((p: NotePage) => p.parentId === null) || parsedPages[0];
@@ -361,11 +272,12 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
     setTheme(newTheme);
     setShowThemeMenu(false);
     
-    // Automatically set specialized animations
     if (newTheme === 'matrix') {
         setBackgroundAnimation('matrixRain');
     } else if (newTheme === 'frosty') {
         setBackgroundAnimation('fallingLeaves');
+    } else if (newTheme === 'cyberpunk') {
+        setBackgroundAnimation('gridStrobe');
     } else {
         setBackgroundAnimation('none'); 
     }
@@ -378,7 +290,7 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
         setIsThemeChanging(false);
     }, 1500);
   };
-
+  
   const handleSummarize = async () => {
     const plainTextNotes = stripHtml(notes);
     if (!plainTextNotes.trim()) {
@@ -468,7 +380,7 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
     };
     setPages(currentPages => [...currentPages, newPage]);
     setActivePageId(newPage.id);
-    if (isSidebarOpen && window.innerWidth < 1024) setIsSidebarOpen(false); // Auto-close on mobile
+    if (isSidebarOpen && window.innerWidth < 1024) setIsSidebarOpen(false); 
   };
 
   const handleDeletePage = (pageIdToDelete: string) => {
@@ -507,12 +419,10 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
 
   const handleMovePage = (draggedId: string, targetId: string, position: 'before' | 'after' | 'inside') => {
     setPages(currentPages => {
-        // 1. Find the dragged page
         const draggedPage = currentPages.find(p => p.id === draggedId);
         const targetPage = currentPages.find(p => p.id === targetId);
         if (!draggedPage || !targetPage || draggedId === targetId) return currentPages;
 
-        // 2. Prevent dragging parent into child (circular dependency)
         let ancestor = targetPage;
         while (ancestor.parentId) {
             if (ancestor.parentId === draggedId) return currentPages;
@@ -521,15 +431,10 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
             ancestor = nextAncestor;
         }
 
-        // 3. Remove dragged page from array (by filtering)
-        // Use map to ensure we work with copies of objects for immutability
         let newPages = currentPages.filter(p => p.id !== draggedId).map(p => ({ ...p }));
-        
-        // 4. Find target in the new array (reference in newPages)
         const targetInNew = newPages.find(p => p.id === targetId);
         if (!targetInNew) return currentPages;
 
-        // 5. Prepare dragged page
         const updatedDragged = { ...draggedPage };
 
         if (position === 'inside') {
@@ -538,337 +443,65 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
             updatedDragged.order = siblings.length;
         } else {
             updatedDragged.parentId = targetInNew.parentId;
-            
             const siblings = newPages.filter(p => p.parentId === targetInNew.parentId);
             siblings.sort((a, b) => a.order - b.order);
-            
             const targetIndex = siblings.findIndex(p => p.id === targetId);
             const insertIndex = position === 'after' ? targetIndex + 1 : targetIndex;
-            
-            // Shift orders for siblings after insertion point
             siblings.forEach((p, idx) => {
                 if (idx >= insertIndex) p.order += 1;
             });
             updatedDragged.order = insertIndex;
         }
-
-        // 6. Add dragged page back
         newPages.push(updatedDragged);
-
-        // 7. Normalize all orders (clean up gaps)
         const grouped = new Map<string | null, NotePage[]>();
         newPages.forEach(p => {
              const pid = p.parentId || null;
              if (!grouped.has(pid)) grouped.set(pid, []);
              grouped.get(pid)!.push(p);
         });
-        
         grouped.forEach(group => {
             group.sort((a, b) => a.order - b.order);
             group.forEach((p, i) => p.order = i);
         });
-
         return newPages;
     });
   };
 
-  const handleCloseQuiz = () => {
-    setQuizQuestions(null);
-    setQuizError(null);
-  }
-
+  const handleCloseQuiz = () => { setQuizQuestions(null); setQuizError(null); }
+  
   const extractVideoID = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  }
-
-  const handleLoadVideo = () => {
-    const id = extractVideoID(videoUrl);
-    setVideoId(id);
-  };
-
-  const handleWidgetPlaceholderClick = (index: number) => {
-    const newWidgets = [...widgets];
-    newWidgets[index] = { type: 'selecting', isBgToggled: false };
-    setWidgets(newWidgets);
-    setActiveWidgetIndex(index);
-  };
-
-  const selectWidget = (index: number, type: WidgetType) => {
-    if (index !== null) {
-      let initialData: any = {};
-      if (type === 'terminal') {
-        initialData = {
-          history: ['Welcome to Zen-Terminal. Type "help" for commands.'],
-          cwdId: null,
-          cwdPath: '/',
-        };
-      }
-      const newWidgets = [...widgets];
-      newWidgets[index] = { type, data: initialData, isBgToggled: false };
-      setWidgets(newWidgets);
-    }
-  };
-
-  const updateWidgetData = (index: number, data: any) => {
-    const newWidgets = [...widgets];
-    newWidgets[index] = { ...newWidgets[index], data };
-    setWidgets(newWidgets);
+      // Improved Regex for YouTube ID extraction (covers youtu.be, embed, v=, etc.)
+      const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+      const match = url.match(regExp);
+      return match ? match[1] : null; 
   };
   
-  const removeWidget = useCallback((index: number) => {
-    setWidgets(currentWidgets => {
-      const newWidgets = [...currentWidgets];
-      newWidgets[index] = { type: 'empty', isBgToggled: false };
-      return newWidgets;
-    });
-    setActiveWidgetIndex(currentIndex => (currentIndex === index ? null : currentIndex));
-  }, []);
-  
-  const handleToggleWidgetBg = (index: number) => {
-    setWidgets(currentWidgets => {
-      const newWidgets = [...currentWidgets];
-      const widget = newWidgets[index];
-      newWidgets[index] = { ...widget, isBgToggled: !widget.isBgToggled };
-      return newWidgets;
-    });
-  };
+  const handleLoadVideo = () => { setVideoId(extractVideoID(videoUrl)); };
+  const handleWidgetPlaceholderClick = (index: number) => { const newWidgets = [...widgets]; newWidgets[index] = { type: 'selecting', isBgToggled: false }; setWidgets(newWidgets); setActiveWidgetIndex(index); };
+  const selectWidget = (index: number, type: WidgetType) => { if (index !== null) { let initialData: any = {}; if (type === 'terminal') { initialData = { history: ['Welcome to Zen-Terminal.'], cwdId: null, cwdPath: '/', }; } const newWidgets = [...widgets]; newWidgets[index] = { type, data: initialData, isBgToggled: false }; setWidgets(newWidgets); } };
+  const updateWidgetData = (index: number, data: any) => { const newWidgets = [...widgets]; newWidgets[index] = { ...newWidgets[index], data }; setWidgets(newWidgets); };
+  const removeWidget = useCallback((index: number) => { setWidgets(currentWidgets => { const newWidgets = [...currentWidgets]; newWidgets[index] = { type: 'empty', isBgToggled: false }; return newWidgets; }); setActiveWidgetIndex(currentIndex => (currentIndex === index ? null : currentIndex)); }, []);
+  const handleToggleWidgetBg = (index: number) => { setWidgets(currentWidgets => { const newWidgets = [...currentWidgets]; const widget = newWidgets[index]; newWidgets[index] = { ...widget, isBgToggled: !widget.isBgToggled }; return newWidgets; }); };
+  const handleMoveWidget = (fromIndex: number, toIndex: number) => { if (fromIndex === toIndex) return; setWidgets(currentWidgets => { const newWidgets = [...currentWidgets]; const item = newWidgets[fromIndex]; newWidgets.splice(fromIndex, 1); newWidgets.splice(toIndex, 0, item); return newWidgets; }); if (activeWidgetIndex === fromIndex) setActiveWidgetIndex(toIndex); else if (activeWidgetIndex !== null) { if (fromIndex < activeWidgetIndex && toIndex >= activeWidgetIndex) setActiveWidgetIndex(activeWidgetIndex - 1); else if (fromIndex > activeWidgetIndex && toIndex <= activeWidgetIndex) setActiveWidgetIndex(activeWidgetIndex + 1); } };
+  const handleWallpaperChange = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onload = async (event) => { const imageUrl = event.target?.result as string; setWallpaperUrl(imageUrl); const theme = await generateThemeFromImage(imageUrl); setDynamicTheme(theme); }; reader.readAsDataURL(file); } };
+  const handleRemoveWallpaper = () => { setWallpaperUrl(null); setDynamicTheme(null); };
+  const handleDefineWord = async (word: string) => { let dictIndex = widgets.findIndex(w => w.type === 'dictionary'); if (dictIndex === -1) { dictIndex = widgets.findIndex(w => w.type === 'empty'); if (dictIndex === -1) dictIndex = 1; selectWidget(dictIndex, 'dictionary'); } setActiveWidgetIndex(dictIndex); updateWidgetData(dictIndex, { word, loading: true, error: null }); try { const result = await lookupDictionary(word); updateWidgetData(dictIndex, { word, result, loading: false }); } catch (error) { updateWidgetData(dictIndex, { word, loading: false, error: "Definition not found." }); } };
+  const handleTerminalCommand = (index: number, command: string, args: string[]) => { /* ... */ };
 
-  const handleMoveWidget = (fromIndex: number, toIndex: number) => {
-      if (fromIndex === toIndex) return;
-      setWidgets(currentWidgets => {
-          const newWidgets = [...currentWidgets];
-          const item = newWidgets[fromIndex];
-          newWidgets.splice(fromIndex, 1);
-          newWidgets.splice(toIndex, 0, item);
-          return newWidgets;
-      });
-      // Also update active widget index if it was moved or displaced
-      if (activeWidgetIndex === fromIndex) {
-          setActiveWidgetIndex(toIndex);
-      } else if (activeWidgetIndex !== null) {
-          // If the active widget was shifted
-          if (fromIndex < activeWidgetIndex && toIndex >= activeWidgetIndex) {
-             setActiveWidgetIndex(activeWidgetIndex - 1);
-          } else if (fromIndex > activeWidgetIndex && toIndex <= activeWidgetIndex) {
-             setActiveWidgetIndex(activeWidgetIndex + 1);
-          }
-      }
-  };
+  const handleSwapLayout = () => {
+    setIsSwapping(true);
+    setTimeout(() => setIsSwapping(false), 500);
 
-  const handleWallpaperChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            const imageUrl = event.target?.result as string;
-            setWallpaperUrl(imageUrl);
-            const theme = await generateThemeFromImage(imageUrl);
-            setDynamicTheme(theme);
-        };
-        reader.readAsDataURL(file);
-    }
-  };
-
-  const handleRemoveWallpaper = () => {
-      setWallpaperUrl(null);
-      setDynamicTheme(null);
-  };
-
-    const handleDefineWord = async (word: string) => {
-        // Find existing dictionary widget
-        let dictIndex = widgets.findIndex(w => w.type === 'dictionary');
-        
-        // If not found, replace the second widget (usually center or top right) or first empty
-        if (dictIndex === -1) {
-             dictIndex = widgets.findIndex(w => w.type === 'empty');
-             if (dictIndex === -1) dictIndex = 1; // Default to 2nd slot
-             
-             // Initialize widget
-             selectWidget(dictIndex, 'dictionary');
-        }
-
-        // Set active to bring attention
-        setActiveWidgetIndex(dictIndex);
-        
-        // Trigger lookup
-        updateWidgetData(dictIndex, { word, loading: true, error: null });
-        try {
-            const result = await lookupDictionary(word);
-            updateWidgetData(dictIndex, { word, result, loading: false });
-        } catch (error) {
-            updateWidgetData(dictIndex, { word, loading: false, error: "Definition not found." });
-        }
-    };
-  
-    const getPagePath = useCallback((pageId: string | null, pagesSource: NotePage[]): string => {
-        if (pageId === null) return '/';
-        const pageMap = new Map(pagesSource.map(p => [p.id, p]));
-        let path = '';
-        let currentId: string | null = pageId;
-        while (currentId) {
-            const page = pageMap.get(currentId);
-            if (page) {
-                path = `/${page.title}` + path;
-                currentId = page.parentId;
-            } else {
-                break;
-            }
-        }
-        return path || '/';
-    }, []);
-
-    const handleTerminalCommand = (index: number, command: string, args: string[]) => {
-        const commandToRun = command.toLowerCase();
-        const widgetData = widgets[index].data;
-        const { cwdId } = widgetData;
-
-        let output = '';
-        let newCwdId = cwdId;
-        let pagesAfterCommand = pages;
-        
-        const childrenOfCwd = pages.filter(p => p.parentId === cwdId);
-
-        switch (commandToRun) {
-            case 'ls':
-                output = childrenOfCwd.length > 0 ? childrenOfCwd.map(p => p.title + (p.isFolder ? '/' : '')).join('\t') : '';
-                break;
-            case 'mkdir': {
-                const name = args[0];
-                if (!name) {
-                    output = `usage: mkdir <directory_name>`;
-                } else if (pages.some(p => p.parentId === cwdId && p.title === name)) {
-                    output = `mkdir: cannot create directory '${name}': File or directory exists`;
-                } else {
-                    handleAddNewPage(cwdId, true, name);
-                }
-                break;
-            }
-            case 'touch': {
-                 const name = args[0];
-                if (!name) {
-                    output = `usage: touch <filename>`;
-                } else if (pages.some(p => p.parentId === cwdId && p.title === name)) {
-                    // touch usually updates timestamp, but here we just do nothing if exists
-                } else {
-                    handleAddNewPage(cwdId, false, name);
-                }
-                break;
-            }
-            case 'cd':
-                const target = args[0];
-                if (!target || target === '/') {
-                    newCwdId = null;
-                } else if (target === '..') {
-                    if (cwdId) {
-                        const currentPage = pages.find(p => p.id === cwdId);
-                        newCwdId = currentPage?.parentId ?? null;
-                    }
-                } else {
-                    const targetPage = childrenOfCwd.find(p => p.title === target);
-                    if (targetPage) {
-                         if (targetPage.isFolder) {
-                            newCwdId = targetPage.id;
-                        } else {
-                             output = `cd: not a directory: ${target}`;
-                        }
-                    } else {
-                        output = `cd: no such file or directory: ${target}`;
-                    }
-                }
-                break;
-            case 'pwd':
-                output = getPagePath(cwdId, pages);
-                break;
-            case 'help':
-                output = 'Available commands: ls, mkdir, touch, cd, pwd, echo, clear, exit';
-                break;
-            case 'echo':
-                output = args.join(' ');
-                break;
-            default:
-                if (commandToRun && commandToRun !== 'clear') {
-                  output = `command not found: ${commandToRun}`;
-                }
-        }
-        
-        const newCwdPath = getPagePath(newCwdId, pagesAfterCommand);
-        const fullCommand = `${command} ${args.join(' ')}`.trim();
-        const prompt = `user@zen-notes:${widgetData.cwdPath || '/'}$`;
-        
-        let finalHistory: string[];
-        if (commandToRun === 'clear') {
-            finalHistory = [];
-        } else {
-            const currentHistory = [...widgetData.history, `${prompt} ${fullCommand}`];
-            if (output) {
-                currentHistory.push(output);
-            }
-            finalHistory = currentHistory;
-        }
-
-        updateWidgetData(index, {
-            ...widgetData,
-            history: finalHistory,
-            cwdId: newCwdId,
-            cwdPath: newCwdPath
+    if ('startViewTransition' in document) {
+      (document as any).startViewTransition(() => {
+        flushSync(() => {
+            setIsLayoutSwapped(prev => !prev);
         });
-    };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isEditing = target.isContentEditable || ['INPUT', 'TEXTAREA'].includes(target.tagName) || target.closest('.modal-content');
-
-      if (isEditing) return;
-
-      // Widget deletion with 'x'
-      if (e.key.toLowerCase() === 'x' && activeWidgetIndex !== null) {
-        e.preventDefault();
-        removeWidget(activeWidgetIndex);
-        return;
-      }
-
-      // Ctrl/Cmd key combinations
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const modifierKey = isMac ? e.metaKey : e.ctrlKey;
-
-      if (modifierKey) {
-        switch (e.key.toLowerCase()) {
-          case 'a':
-            e.preventDefault();
-            // cycleTheme(); // Disabled shortcut for cycling for now
-            break;
-          case 's':
-            e.preventDefault();
-            setIsSidebarOpen(prev => !prev);
-            break;
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [activeWidgetIndex, removeWidget]);
-  
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
-        setShowUserMenu(false);
-      }
-      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
-        setShowThemeMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
+      });
+    } else {
+      setIsLayoutSwapped(prev => !prev);
+    }
+  };
 
   return (
     <div 
@@ -882,25 +515,21 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
        {wallpaperUrl && <div className="wallpaper-background" style={{ backgroundImage: `url(${wallpaperUrl})` }}></div>}
        <input type="file" accept="image/*" ref={wallpaperInputRef} onChange={handleWallpaperChange} className="hidden" />
 
-      <header className="flex-none flex items-center justify-between p-4 border-b border-[var(--border-primary)] h-[80px] bg-[var(--bg-primary)] z-50 transition-all duration-300">
+      <header className="flex-none flex items-center justify-between p-4 border-b border-[var(--border-primary)] h-[80px] bg-[var(--bg-primary)] z-50 transition-all duration-300 ml-16">
         <div className="flex-1 flex justify-start">
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4 md:gap-6">
                 <button 
-                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                  className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press w-10 h-10 flex items-center justify-center"
-                  aria-label="Toggle Sidebar"
+                    onClick={onGoHome}
+                    className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press w-10 h-10 flex items-center justify-center"
+                    title="Go to Landing Page"
                 >
-                    <div className="w-5 flex flex-col gap-1.5 items-center justify-center overflow-hidden">
-                         <span className={`block w-5 h-0.5 bg-current rounded-full transition-all duration-300 ease-in-out ${isSidebarOpen ? 'rotate-45 translate-y-2' : ''}`} />
-                         <span className={`block w-5 h-0.5 bg-current rounded-full transition-all duration-300 ease-in-out ${isSidebarOpen ? 'opacity-0 translate-x-full' : ''}`} />
-                         <span className={`block w-5 h-0.5 bg-current rounded-full transition-all duration-300 ease-in-out ${isSidebarOpen ? '-rotate-45 -translate-y-2' : ''}`} />
-                    </div>
+                    <HomeIcon className="w-5 h-5" />
                 </button>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 hidden md:flex">
                     <div className="relative group">
-                        <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent)] to-[var(--success)] rounded-xl blur-sm opacity-50 group-hover:opacity-70 transition-opacity duration-300"></div>
-                        <div className="relative p-2 bg-gradient-to-br from-[var(--accent)] to-[var(--success)] rounded-xl shadow-lg">
-                            <InfinityIcon className="w-8 h-8" strokeColor="white" />
+                        {/* Modern Glassmorphic Logo Container */}
+                        <div className="relative p-2 rounded-xl bg-[var(--bg-secondary)]/50 backdrop-blur-md border border-[var(--border-primary)] shadow-sm group-hover:border-[var(--accent)] group-hover:shadow-lg transition-all duration-300 flex items-center justify-center">
+                            <InfinityIcon className="w-8 h-8" />
                         </div>
                     </div>
                     <div>
@@ -916,48 +545,25 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
         <div className="flex-1 flex justify-end">
             <div className="flex items-center gap-2 sm:gap-4">
                 <div className="hidden sm:flex items-center gap-2 sm:gap-4">
+                  <button onClick={onOpenWidgets} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title="Open Widgets Board">
+                      <Squares2X2Icon className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => setShowPdfViewer(true)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title="PDF Library">
+                      <DocumentTextIcon className="w-5 h-5" />
+                  </button>
+                  
+                  <button 
+                      onClick={handleSwapLayout} 
+                      className={`p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all duration-500 btn-press ${isSwapping ? 'rotate-180' : ''}`}
+                      title="Swap Layout"
+                  >
+                      <ArrowsRightLeftIcon className="w-5 h-5" />
+                  </button>
+
                   <button onClick={() => setIsZenMode(!isZenMode)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title={isZenMode ? "Exit Zen Mode" : "Enter Zen Mode"}>
                       <FocusIcon className="w-5 h-5" />
                   </button>
-                  <button onClick={() => {
-                        setIsLayoutSwapped(!isLayoutSwapped);
-                        if ((document as any).startViewTransition) {
-                            (document as any).startViewTransition(() => {
-                            });
-                        }
-                    }} 
-                    className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" 
-                    title={isLayoutSwapped ? "Layout: Notebook Left" : "Layout: Notebook Right"}>
-                      <ArrowsRightLeftIcon className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => setShowPdfViewer(true)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title="Open PDF Library">
-                      <DocumentTextIcon className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => setShowShortcutHelp(true)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title="View Keyboard Shortcuts">
-                      <QuestionMarkCircleIcon className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => wallpaperInputRef.current?.click()} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title="Change Wallpaper">
-                      <ImageIcon className="w-5 h-5" />
-                  </button>
-                  {wallpaperUrl && (
-                      <button onClick={handleRemoveWallpaper} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title="Remove Wallpaper">
-                          <NoSymbolIcon className="w-5 h-5" />
-                      </button>
-                  )}
-                  <div className="relative">
-                      <button onClick={() => setShowBrightnessSlider(prev => !prev)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press">
-                      <SunIcon className="w-5 h-5" />
-                      </button>
-                      {showBrightnessSlider && (
-                      <BrightnessSlider
-                          brightness={brightness}
-                          setBrightness={setBrightness}
-                          onClose={() => setShowBrightnessSlider(false)}
-                      />
-                      )}
-                  </div>
                   
-                  {/* Theme Dropdown */}
                   <div className="relative" ref={themeMenuRef}>
                       <button onClick={() => setShowThemeMenu(prev => !prev)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press">
                           <ThemeIcon className="w-5 h-5" />
@@ -968,6 +574,7 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
                                   { id: 'light', label: 'Light', style: 'bg-white border-gray-200 text-gray-800' },
                                   { id: 'monokai', label: 'Monokai', style: 'bg-[#272822] border-[#75715E] text-[#F92672]' },
                                   { id: 'pitch-black', label: 'Dark', style: 'bg-black border-gray-800 text-white' },
+                                  { id: 'cyberpunk', label: 'Cyber', style: 'bg-zinc-950 border-cyan-500 text-cyan-400' },
                                   { id: 'frosty', label: 'Frosty', style: 'bg-blue-100 border-blue-200 text-blue-600' },
                                   { id: 'matrix', label: 'Matrix', style: 'bg-black border-green-500 text-green-500 font-mono' },
                               ].map((t) => (
@@ -982,11 +589,7 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
                               ))}
                           </div>
                       )}
-                      {themeNameToast && (
-                          <div className="theme-toast">{themeNameToast}</div>
-                      )}
                   </div>
-
                 </div>
                 {/* User Profile Dropdown */}
                 <div className="relative" ref={userMenuRef}>
@@ -1004,6 +607,10 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
                                  </div>
                             </div>
                             <div className="p-1">
+                                <button onClick={() => { setShowSettings(true); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--bg-primary)] rounded-md transition-all">
+                                     <QuestionMarkCircleIcon className="w-4 h-4 text-[var(--text-secondary)]" />
+                                     <span>Settings</span>
+                                </button>
                                 <button onClick={() => setShowShortcutHelp(true)} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--bg-primary)] rounded-md transition-all">
                                      <QuestionMarkCircleIcon className="w-4 h-4 text-[var(--text-secondary)]" />
                                      <span>Keyboard Shortcuts</span>
@@ -1022,8 +629,7 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
       
       {/* Main Body Container */}
       <div className="flex-1 flex overflow-hidden relative">
-        
-        {/* Sidebar Container */}
+        {/* Sidebar ... */}
         <div className={`
             absolute lg:relative inset-y-0 left-0 z-40 h-full sidebar-root
             transition-all duration-300 ease-in-out bg-[var(--bg-primary)] overflow-hidden
@@ -1040,11 +646,12 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
                 onDeletePage={handleDeletePage}
                 onRenamePage={handleRenamePage}
                 onMovePage={handleMovePage}
-                backgroundAnimation={backgroundAnimation}
-                onAnimationChange={setBackgroundAnimation}
+                backgroundAnimation={backgroundAnimation as any}
+                onAnimationChange={(t) => setBackgroundAnimation(t)}
                 tagsMap={allTagsMap}
                 selectedTag={selectedTag}
                 onSelectTag={setSelectedTag}
+                onOpenSettings={() => setShowSettings(true)}
             />
         </div>
 
@@ -1086,6 +693,7 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
                   isGeneratingQuiz={isGeneratingQuiz}
                   pageTodos={activePage?.todos}
                   onTodosChange={handleTodosChange}
+                  onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                 />
                 {summaryContent && (
                     <SummaryView 
@@ -1164,6 +772,16 @@ function App({ user, onLogout, theme, setTheme }: AppProps) {
       )}
 
       <ShortcutHelp isOpen={showShortcutHelp} onClose={() => setShowShortcutHelp(false)} />
+      
+      {showSettings && (
+          <SettingsModal 
+            isOpen={showSettings} 
+            onClose={() => setShowSettings(false)} 
+            user={user} 
+            onUpdateUser={onUpdateUser}
+            onLogout={onLogout}
+          />
+      )}
 
       {/* PDF Library Modal */}
       {showPdfViewer && (

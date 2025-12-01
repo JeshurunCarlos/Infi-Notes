@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Question } from '../components/QuizView';
 
 export async function generateHighlightedSummary(text: string): Promise<string> {
@@ -31,7 +31,7 @@ ${text}`,
         temperature: 0.3,
       },
     });
-    return response.text;
+    return response.text as string;
   } catch (error) {
     console.error("Error summarizing text:", error);
     if (error instanceof Error) {
@@ -49,7 +49,7 @@ export async function generateQuizFromNotes(text: string): Promise<Question[]> {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: 'gemini-2.5-flash',
             contents: `Based on the following notes, generate a quiz with 3 to 5 questions. Create a mix of multiple-choice and short-answer questions to test knowledge. For multiple-choice questions, provide 4 options. Ensure the correct answer is one of the options for MCQs.
 
 Here are the notes:
@@ -88,7 +88,7 @@ ${text}
             },
         });
 
-        const jsonResponse = JSON.parse(response.text);
+        const jsonResponse = JSON.parse(response.text as string);
         return jsonResponse.questions || [];
 
     } catch (error) {
@@ -105,9 +105,13 @@ export async function performGoogleSearch(query: string): Promise<{ text: string
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `You are a helpful assistant. Answer the following query using Google Search.
-Highlight technical terms, important entities, or key concepts by wrapping them in double equals signs, like ==this==.
-If you find relevant images from the search results, please include them using Markdown syntax: ![alt text](url).
+            contents: `You are a helpful and knowledgeable assistant. Answer the following query using Google Search.
+            
+Important Formatting Rules:
+1. Use **bold** Markdown syntax for key concepts, names, and important entities.
+2. Use bullet points or numbered lists where appropriate to structure the answer.
+3. If you find relevant images in the search results, include them using Markdown syntax: ![alt text](url).
+4. Keep paragraphs concise and readable.
 
 Query: ${query}`,
             config: {
@@ -115,7 +119,7 @@ Query: ${query}`,
             },
         });
 
-        const text = response.text;
+        const text = response.text as string;
         const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
         
         return { text, sources };
@@ -143,7 +147,7 @@ export async function getMusicSuggestions(mood: string): Promise<string[]> {
                 }
             },
         });
-        return JSON.parse(response.text);
+        return JSON.parse(response.text as string);
     } catch (error) {
         console.error("Error getting suggestions:", error);
         return [];
@@ -219,7 +223,7 @@ export async function lookupDictionary(word: string): Promise<DictionaryResult> 
             },
         });
 
-        return JSON.parse(response.text);
+        return JSON.parse(response.text as string);
     } catch (error) {
         console.error("Error looking up dictionary:", error);
         throw new Error("Failed to fetch definition.");
@@ -229,11 +233,6 @@ export async function lookupDictionary(word: string): Promise<DictionaryResult> 
 export async function chatWithJournal(journalContent: string, userMessage: string, history: { role: 'user' | 'model', text: string }[]): Promise<string> {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        
-        // Construct conversation history for context
-        // We will use generateContent with system instructions for single-turn logic or construct a chat session if using `ai.chats.create`
-        // To keep it simple and stateless here, we send the history as part of the prompt or contents.
-        
         const systemInstruction = `You are a thoughtful, empathetic journaling companion. 
         Your goal is to help the user reflect on their thoughts, explore their feelings, and gain clarity. 
         
@@ -242,7 +241,6 @@ export async function chatWithJournal(journalContent: string, userMessage: strin
         
         Respond to the user's latest message in a supportive, non-judgmental way. Ask open-ended questions if appropriate to deepen their reflection. Keep responses concise and conversational.`;
 
-        // Format history for the prompt
         let historyText = "";
         history.forEach(msg => {
             historyText += `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.text}\n`;
@@ -255,9 +253,140 @@ export async function chatWithJournal(journalContent: string, userMessage: strin
             contents: prompt
         });
 
-        return response.text;
+        return response.text as string;
     } catch (error) {
         console.error("Journal Chat Error", error);
         return "I'm having a little trouble connecting to my thoughts right now. Please try again.";
+    }
+}
+
+export async function performChat(message: string, history: { role: 'user' | 'model', text: string }[]): Promise<string> {
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        let historyText = "";
+        history.forEach(msg => {
+            historyText += `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.text}\n`;
+        });
+
+        const prompt = `You are a helpful AI assistant connected to the internet. 
+        Answer the user's question clearly and concisely.
+        
+        Important Formatting Rules:
+        1. Use **bold** for emphasis on key terms.
+        2. Use bullet points or lists for structured data.
+        3. Use code blocks for code snippets.
+        4. If your answer depends on real-time information or search results, cite your sources at the end.
+        
+        Conversation History:
+        ${historyText}
+        User: ${message}
+        AI:`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }]
+            }
+        });
+
+        let text = response.text as string || "I couldn't generate a response.";
+        const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+
+        // Append sources to text if available
+        if (sources.length > 0) {
+            text += "\n\n**Sources:**\n";
+            sources.forEach((chunk: any) => {
+                if (chunk.web) {
+                    text += `- [${chunk.web.title}](${chunk.web.uri})\n`;
+                }
+            });
+        }
+
+        return text;
+    } catch (error) {
+        console.error("Chat Error", error);
+        return "I encountered an error processing your request. Please try again.";
+    }
+}
+
+export interface NewsItem {
+    title: string;
+    summary: string;
+    source: string;
+    url: string;
+}
+
+export async function fetchNews(): Promise<NewsItem[]> {
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Find the top 5 latest world news headlines right now. 
+            Return ONLY a valid raw JSON array string (no markdown formatting, no code blocks) where each object has:
+            - "title": The headline.
+            - "summary": A concise summary (max 30 words).
+            - "source": The name of the news source.
+            - "url": A link to the story (if available from search results, otherwise leave empty).
+            `,
+            config: {
+                tools: [{ googleSearch: {} }]
+            }
+        });
+
+        let jsonString = response.text || "[]";
+        
+        // Robust JSON extraction: Find first [ and last ]
+        const firstBracket = jsonString.indexOf('[');
+        const lastBracket = jsonString.lastIndexOf(']');
+        
+        if (firstBracket !== -1 && lastBracket !== -1) {
+            jsonString = jsonString.substring(firstBracket, lastBracket + 1);
+        } else {
+            console.warn("No JSON array found in news response");
+            return [];
+        }
+        
+        const newsItems = JSON.parse(jsonString);
+        return Array.isArray(newsItems) ? newsItems : [];
+    } catch (error) {
+        console.error("Error fetching news:", error);
+        return [];
+    }
+}
+
+export async function generateSpeechFromText(text: string): Promise<ArrayBuffer> {
+    if (!text.trim()) throw new Error("No text to read.");
+    
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: [{ parts: [{ text }] }],
+            config: {
+                responseModalities: [Modality.AUDIO], // Strictly use Modality enum
+                speechConfig: {
+                    voiceConfig: {
+                        prebuiltVoiceConfig: { voiceName: 'Kore' },
+                    },
+                },
+            },
+        });
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!base64Audio) throw new Error("No audio generated.");
+
+        // Decode Base64 to ArrayBuffer
+        const binaryString = atob(base64Audio);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    } catch (error) {
+        console.error("TTS Error:", error);
+        throw error;
     }
 }
