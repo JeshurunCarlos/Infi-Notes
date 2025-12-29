@@ -344,7 +344,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   const isSearching = !!searchQuery.trim();
 
   return (
-    <aside className={`relative flex flex-col h-full w-full p-4 overflow-hidden min-w-[250px] ${backgroundAnimation === 'none' ? 'animated-sidebar-gradient' : ''}`}>
+    // Removed conditional backgroundAnimation class to prevent dark artifacts
+    <aside className="relative flex flex-col h-full w-full p-4 overflow-hidden min-w-[250px]">
         <div className="relative z-10 flex items-center justify-between mb-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] px-2">Pages</h2>
             <div className="flex items-center">

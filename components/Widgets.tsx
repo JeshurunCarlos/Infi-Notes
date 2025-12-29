@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { WidgetType, ToDoItem } from '../types';
-import { TimerIcon, ImageIcon, LinkIcon, CalculatorIcon, CloseIcon, MicrophoneIcon, ClipboardIcon, MusicNoteIcon, PlayIcon, PauseIcon, BackwardIcon, ForwardIcon, SpotifyIcon, PlusIcon, MinusIcon, TerminalIcon, ArrowsPointingInIcon, EyeIcon, EyeSlashIcon, GoogleIcon, ChevronLeftIcon, ChevronRightIcon, MagnifyingGlassIcon, SpeakerWaveIcon, QueueListIcon, TrashIcon, MusicalNoteIcon, SpeakerXMarkIcon, FolderIcon, SparklesIcon, ArrowPathIcon, LanguageIcon, ClipboardDocumentCheckIcon, ArrowsPointingOutIcon, BoltIcon, ChatBubbleLeftRightIcon, CubeIcon, ListBulletIcon, Squares2X2Icon, NewspaperIcon, ArrowDownIcon, ArrowPathIcon as RefreshIcon } from './Icons';
+import { TimerIcon, ImageIcon, LinkIcon, CalculatorIcon, CloseIcon, MicrophoneIcon, ClipboardIcon, MusicNoteIcon, PlayIcon, PauseIcon, BackwardIcon, ForwardIcon, SpotifyIcon, PlusIcon, MinusIcon, TerminalIcon, ArrowsPointingInIcon, EyeIcon, EyeSlashIcon, GoogleIcon, ChevronLeftIcon, ChevronRightIcon, MagnifyingGlassIcon, SpeakerWaveIcon, QueueListIcon, TrashIcon, MusicalNoteIcon, SpeakerXMarkIcon, FolderIcon, SparklesIcon, ArrowPathIcon, LanguageIcon, ClipboardDocumentCheckIcon, ArrowsPointingOutIcon, BoltIcon, ChatBubbleLeftRightIcon, CubeIcon, ListBulletIcon, Squares2X2Icon, NewspaperIcon, ArrowDownTrayIcon, GlobeIcon, BookOpenIcon, CloudIcon, SignalSlashIcon, CheckIcon } from './Icons';
 import Spinner from './Spinner';
 import ToDoList from './ToDoList';
-import { performGoogleSearch, getMusicSuggestions, lookupDictionary, DictionaryResult, performChat, fetchNews, NewsItem } from '../lib/ai';
+import { performGoogleSearch, lookupDictionary, DictionaryResult, performChat, fetchNews, NewsItem, fetchWeather, WeatherData } from '../lib/ai';
 import { CalculatorWidget } from './CalculatorWidget';
 
 // Re-export CalculatorWidget
@@ -16,34 +16,39 @@ declare global {
   }
 }
 
+// --- Loading Overlay for Widgets ---
+const WidgetLoadingOverlay: React.FC<{ label?: string }> = ({ label = "Connecting..." }) => (
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[var(--bg-secondary)]/80 backdrop-blur-sm animate-[fadeIn_0.3s_ease-out]">
+        <div className="relative group">
+            <div className="absolute inset-0 bg-[var(--accent)]/20 blur-xl rounded-full animate-pulse"></div>
+            <Spinner className="w-8 h-8 text-[var(--accent)] relative z-10" />
+        </div>
+        <span className="mt-3 text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)] animate-pulse">{label}</span>
+    </div>
+);
+
+// --- Offline Placeholder ---
+const OfflinePlaceholder: React.FC<{ label: string }> = ({ label }) => (
+    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 text-center group">
+        <SignalSlashIcon className="w-8 h-8 text-rose-500 mb-2 opacity-60 group-hover:opacity-100 transition-opacity" />
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label} Required</span>
+        <span className="text-[8px] text-slate-500 mt-1">Please connect to internet</span>
+    </div>
+);
+
 // --- Simple Markdown Parser Component ---
 const SimpleMarkdown: React.FC<{ content: string }> = ({ content }) => {
     if (!content) return null;
-
-    // Helper to process inline formatting
     const renderInline = (text: string) => {
-        // Regex splits: bold, italic, inline code, images, links
         const parts = text.split(/(\*\*[^*]+\*\*|_[^_]+_|`[^`]+`|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\))/g);
-        
         return parts.map((part, i) => {
-            // Bold
-            if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={i} className="font-bold text-[var(--text-primary)]">{part.slice(2, -2)}</strong>;
-            }
-            // Italic
-            if (part.startsWith('_') && part.endsWith('_')) {
-                return <em key={i} className="italic text-[var(--text-secondary)]">{part.slice(1, -1)}</em>;
-            }
-            // Inline Code
-            if (part.startsWith('`') && part.endsWith('`')) {
-                return <code key={i} className="bg-[var(--bg-primary)] border border-[var(--border-primary)] px-1 rounded font-mono text-[var(--accent)] text-xs">{part.slice(1, -1)}</code>;
-            }
-            // Images: ![alt](url)
+            if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} className="font-bold text-[var(--text-primary)]">{part.slice(2, -2)}</strong>;
+            if (part.startsWith('_') && part.endsWith('_')) return <em key={i} className="italic text-[var(--text-secondary)]">{part.slice(1, -1)}</em>;
+            if (part.startsWith('`') && part.endsWith('`')) return <code key={i} className="bg-[var(--bg-primary)] border border-[var(--border-primary)] px-1 rounded font-mono text-[var(--accent)] text-xs">{part.slice(1, -1)}</code>;
             if (part.startsWith('![') && part.includes('](') && part.endsWith(')')) {
                 const match = part.match(/!\[(.*?)\]\((.*?)\)/);
                 if (match) return <img key={i} src={match[2]} alt={match[1]} className="max-w-full rounded-lg my-2 border border-[var(--border-primary)]" />;
             }
-            // Links: [text](url)
             if (part.startsWith('[') && part.includes('](') && part.endsWith(')')) {
                 const match = part.match(/\[(.*?)\]\((.*?)\)/);
                 if (match) return <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline font-medium">{match[1]}</a>;
@@ -51,234 +56,113 @@ const SimpleMarkdown: React.FC<{ content: string }> = ({ content }) => {
             return part;
         });
     };
-
     const lines = content.split('\n');
     const elements: React.ReactNode[] = [];
-    
     let listBuffer: React.ReactNode[] = [];
     let inList = false;
-
     lines.forEach((line, index) => {
         const trimmed = line.trim();
-        
-        // Handle Lists
         if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
             inList = true;
             listBuffer.push(<li key={`li-${index}`} className="mb-1">{renderInline(trimmed.substring(2))}</li>);
             return;
         } 
-        
-        // Flush List if needed
         if (inList) {
             elements.push(<ul key={`ul-${index}`} className="list-disc pl-5 mb-2 space-y-1">{listBuffer}</ul>);
             listBuffer = [];
             inList = false;
         }
-
-        if (!trimmed) {
-            // Empty line -> implies spacing, maybe handled by margin of previous block
-            return;
-        }
-
-        // Headings
-        if (trimmed.startsWith('### ')) {
-            elements.push(<h3 key={index} className="text-sm font-bold mt-3 mb-1 text-[var(--text-primary)]">{renderInline(trimmed.substring(4))}</h3>);
-        } else if (trimmed.startsWith('## ')) {
-            elements.push(<h2 key={index} className="text-base font-bold mt-4 mb-2 text-[var(--text-primary)]">{renderInline(trimmed.substring(3))}</h2>);
-        } else if (trimmed.startsWith('# ')) {
-            elements.push(<h1 key={index} className="text-lg font-bold mt-4 mb-2 text-[var(--text-primary)]">{renderInline(trimmed.substring(2))}</h1>);
-        }
-        // Code Blocks (simplistic handling for lines starting with ```)
-        else if (trimmed.startsWith('```')) {
-             // For simplicity in this lightweight parser, we just ignore the fence line or treat content as code block if logic was more complex.
-             // Here we'll just skip the fence line to avoid rendering it as text.
-        }
-        // Standard Paragraph
-        else {
-            elements.push(<p key={index} className="mb-2 leading-relaxed">{renderInline(trimmed)}</p>);
-        }
+        if (!trimmed) return;
+        if (trimmed.startsWith('### ')) elements.push(<h3 key={index} className="text-sm font-bold mt-3 mb-1 text-[var(--text-primary)]">{renderInline(trimmed.substring(4))}</h3>);
+        else if (trimmed.startsWith('## ')) elements.push(<h2 key={index} className="text-base font-bold mt-4 mb-2 text-[var(--text-primary)]">{renderInline(trimmed.substring(3))}</h2>);
+        else if (trimmed.startsWith('# ')) elements.push(<h1 key={index} className="text-lg font-bold mt-4 mb-2 text-[var(--text-primary)]">{renderInline(trimmed.substring(2))}</h1>);
+        else elements.push(<p key={index} className="mb-2 leading-relaxed">{renderInline(trimmed)}</p>);
     });
-
-    // Flush remaining list
-    if (inList && listBuffer.length > 0) {
-        elements.push(<ul key="ul-end" className="list-disc pl-5 mb-2 space-y-1">{listBuffer}</ul>);
-    }
-
+    if (inList && listBuffer.length > 0) elements.push(<ul key="ul-end" className="list-disc pl-5 mb-2 space-y-1">{listBuffer}</ul>);
     return <div className="markdown-content text-xs">{elements}</div>;
 };
 
-
-// Widget Selection (Inline)
 interface WidgetSelectionViewProps {
   onSelect: (type: WidgetType) => void;
   onCancel: () => void;
+  iconSize?: 'normal' | 'large';
 }
 
-export const WidgetSelectionView: React.FC<WidgetSelectionViewProps> = ({ onSelect, onCancel }) => {
+export const WidgetSelectionView: React.FC<WidgetSelectionViewProps> = ({ onSelect, onCancel, iconSize = 'normal' }) => {
+    const sizeClass = iconSize === 'large' ? "w-10 h-10 md:w-12 md:h-12" : "w-8 h-8";
+    const textSizeClass = iconSize === 'large' ? "text-xs md:text-sm" : "text-[9px]";
+    const emojiClass = iconSize === 'large' ? "text-3xl md:text-4xl" : "text-xl";
     const allOptions = [
-        { type: 'news', label: 'News', description: 'Latest World Headlines', icon: <NewspaperIcon className="w-6 h-6" /> },
-        { type: 'pomodoro', label: 'Pomodoro', description: 'Focus Timer', icon: <TimerIcon className="w-6 h-6" /> },
-        { type: 'googlesearch', label: 'Search', description: 'Quick Google Search', icon: <GoogleIcon className="w-6 h-6" /> },
-        { type: 'chatgpt', label: 'ChatGPT', description: 'AI Assistant', icon: <ChatBubbleLeftRightIcon className="w-6 h-6" /> },
-        { type: 'todolist', label: 'To-Do', description: 'Task Manager', icon: <ClipboardIcon className="w-6 h-6" /> },
-        { type: 'calculator', label: 'Calc', description: 'Scientific Calculator', icon: <CalculatorIcon className="w-6 h-6" /> },
-        { type: 'dictionary', label: 'Dict', description: 'Definitions & Synonyms', icon: <LanguageIcon className="w-6 h-6" /> },
-        { type: 'spotify', label: 'Spotify', description: 'Music Player', icon: <SpotifyIcon className="w-6 h-6" /> },
-        { type: 'music', label: 'Local Music', description: 'Play Local Files', icon: <MusicNoteIcon className="w-6 h-6" /> },
-        { type: 'stickynote', label: 'Notes', description: 'Quick Memo', icon: <ClipboardIcon className="w-6 h-6" /> },
-        { type: 'image', label: 'Image', description: 'Photo Frame', icon: <ImageIcon className="w-6 h-6" /> },
-        { type: 'hyperlink', label: 'Link', description: 'Quick Bookmark', icon: <LinkIcon className="w-6 h-6" /> },
-        { type: 'terminal', label: 'Terminal', description: 'Command Line', icon: <TerminalIcon className="w-6 h-6" /> },
-        { type: 'game2048', label: '2048', description: 'Puzzle Game', icon: <CubeIcon className="w-6 h-6" /> },
-        { type: 'snake', label: 'Snake', description: 'Classic Game', icon: <span className="text-xl">🐍</span> },
-        { type: 'zipgame', label: 'Breathe', description: '4-7-8 Breathing', icon: <SparklesIcon className="w-6 h-6" /> },
+        { type: 'news', label: 'News', description: 'Latest World Headlines', icon: <NewspaperIcon className={sizeClass} /> },
+        { type: 'pomodoro', label: 'Pomodoro', description: 'Focus Timer', icon: <TimerIcon className={sizeClass} /> },
+        { type: 'googlesearch', label: 'Search', description: 'Quick Google Search', icon: <GoogleIcon className={sizeClass} /> },
+        { type: 'wikipedia', label: 'Wikipedia', description: 'Encyclopedia Search', icon: <GlobeIcon className={sizeClass} /> },
+        { type: 'chatgpt', label: 'ChatGPT', description: 'AI Assistant', icon: <ChatBubbleLeftRightIcon className={sizeClass} /> },
+        { type: 'todolist', label: 'To-Do', description: 'Task Manager', icon: <ClipboardIcon className={sizeClass} /> },
+        { type: 'calculator', label: 'Calc', description: 'Scientific Calculator', icon: <CalculatorIcon className={sizeClass} /> },
+        { type: 'dictionary', label: 'Dict', description: 'Definitions & Synonyms', icon: <LanguageIcon className={sizeClass} /> },
+        { type: 'spotify', label: 'Spotify', description: 'Music Player', icon: <SpotifyIcon className={sizeClass} /> },
+        { type: 'music', label: 'Local Music', description: 'Play Local Files', icon: <MusicNoteIcon className={sizeClass} /> },
+        { type: 'stickynote', label: 'Notes', description: 'Quick Memo', icon: <ClipboardIcon className={sizeClass} /> },
+        { type: 'image', label: 'Image', description: 'Photo Frame', icon: <ImageIcon className={sizeClass} /> },
+        { type: 'hyperlink', label: 'Link', description: 'Quick Bookmark', icon: <LinkIcon className={sizeClass} /> },
+        { type: 'terminal', label: 'Terminal', description: 'Command Line', icon: <TerminalIcon className={sizeClass} /> },
+        { type: 'game2048', label: '2048', description: 'Puzzle Game', icon: <CubeIcon className={sizeClass} /> },
+        { type: 'snake', label: 'Snake', description: 'Classic Game', icon: <span className={emojiClass}>🐍</span> },
+        { type: 'downloadpdf', label: 'Save PDF', description: 'Export Notes', icon: <ArrowDownTrayIcon className={sizeClass} /> },
     ] as const;
-    
     const [page, setPage] = useState(0);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-    
     const pageSize = 9;
     const numPages = Math.ceil(allOptions.length / pageSize);
     const optionsToShow = allOptions.slice(page * pageSize, (page + 1) * pageSize);
-    
-    const lastSwipeTime = useRef(0);
-
-    // Keyboard Navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.altKey && e.key.toLowerCase() === 'e') {
-                e.preventDefault();
-                onCancel();
-            } else if (viewMode === 'grid') {
-                if (e.key === 'ArrowRight') {
-                    setPage(p => (p + 1) % numPages);
-                } else if (e.key === 'ArrowLeft') {
-                    setPage(p => (p - 1 + numPages) % numPages);
-                }
+            if (e.altKey && e.key.toLowerCase() === 'e') { e.preventDefault(); onCancel(); }
+            else if (viewMode === 'grid') {
+                if (e.key === 'ArrowRight') setPage(p => (p + 1) % numPages);
+                else if (e.key === 'ArrowLeft') setPage(p => (p - 1 + numPages) % numPages);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [viewMode, numPages, onCancel]);
-
-    const handleWheel = (e: React.WheelEvent) => {
-        // Debounce to prevent rapid flipping
-        const now = Date.now();
-        if (now - lastSwipeTime.current < 400) return;
-
-        // Detect horizontal swipe (common for trackpad pagination)
-        if (Math.abs(e.deltaX) > 20) {
-            if (e.deltaX > 0) {
-                // Swipe Right -> Next Page
-                setPage(p => (p + 1) % numPages);
-            } else {
-                // Swipe Left -> Prev Page
-                setPage(p => (p - 1 + numPages) % numPages);
-            }
-            lastSwipeTime.current = now;
-        }
-    };
-
     return (
-        <div 
-            onWheel={handleWheel}
-            className="w-full h-full flex flex-col p-2 relative rounded-xl overflow-hidden animated-gradient-placeholder"
-        >
-            {/* Inner Glass Container */}
+        <div className="w-full h-full flex flex-col p-1.5 relative rounded-xl overflow-hidden animated-gradient-placeholder">
             <div className="absolute inset-0 bg-[var(--bg-primary)]/80 backdrop-blur-md z-0"></div>
-
-            {/* Header */}
-            <div className="relative z-10 flex justify-between items-center mb-2 px-1 flex-shrink-0 h-8 border-b border-[var(--border-primary)]/50 pb-1">
-                <div className="flex items-center gap-2">
-                    <button 
-                        onClick={() => setViewMode('grid')}
-                        className={`p-1 rounded transition-colors ${viewMode === 'grid' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'}`}
-                        title="Grid View"
-                    >
-                        <Squares2X2Icon className="w-3 h-3" />
-                    </button>
-                    <button 
-                        onClick={() => setViewMode('list')}
-                        className={`p-1 rounded transition-colors ${viewMode === 'list' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'}`}
-                        title="List View"
-                    >
-                        <ListBulletIcon className="w-3 h-3" />
-                    </button>
+            <div className="relative z-10 flex justify-between items-center mb-1 px-1 flex-shrink-0 h-7 border-b border-[var(--border-primary)]/50 pb-1">
+                <div className="flex items-center gap-1">
+                    <button onClick={() => setViewMode('grid')} className={`p-1 rounded transition-colors ${viewMode === 'grid' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'}`} title="Grid View"><Squares2X2Icon className="w-3 h-3" /></button>
+                    <button onClick={() => setViewMode('list')} className={`p-1 rounded transition-colors ${viewMode === 'list' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'}`} title="List View"><ListBulletIcon className="w-3 h-3" /></button>
                 </div>
-                <button 
-                    onClick={onCancel} 
-                    className="p-1 rounded-full hover:bg-[var(--bg-primary)] btn-press text-[var(--text-secondary)] hover:text-[var(--danger)] transition-colors flex items-center gap-1"
-                    title="Close (Alt+E)"
-                >
-                    <span className="text-[9px] font-mono opacity-50 hidden sm:inline">Alt+E</span>
-                    <CloseIcon className="w-3 h-3"/>
-                </button>
+                <button onClick={onCancel} className="p-1 rounded-full hover:bg-[var(--bg-primary)] btn-press text-[var(--text-secondary)] hover:text-[var(--danger)] transition-colors flex items-center gap-1" title="Close (Alt+E)"><CloseIcon className="w-3 h-3"/></button>
             </div>
-            
-            {/* Content Area */}
             {viewMode === 'grid' ? (
                 <>
-                    <div className="relative z-10 flex-grow min-h-0 grid grid-cols-3 grid-rows-3 gap-2">
+                    <div className="relative z-10 flex-grow min-h-0 grid grid-cols-3 grid-rows-3 gap-1.5">
                         {optionsToShow.map(option => (
-                            <button 
-                                key={option.type}
-                                onClick={() => onSelect(option.type as WidgetType)}
-                                className="group flex flex-col items-center justify-center rounded-lg transition-all duration-300 w-full h-full btn-press relative overflow-hidden hover:bg-[var(--bg-secondary)] border border-transparent hover:border-[var(--border-primary)]"
-                            >
-                                <div className="text-[var(--text-secondary)] group-hover:text-[var(--accent)] group-hover:scale-110 transition-all duration-300">
-                                     {option.icon}
-                                </div>
-                                <span className="text-[9px] font-semibold mt-1 text-[var(--text-primary)]/70 group-hover:text-[var(--text-primary)] transition-colors">{option.label}</span>
+                            <button key={option.type} onClick={() => onSelect(option.type as WidgetType)} className="group flex flex-col items-center justify-center rounded-lg transition-all duration-300 w-full h-full btn-press relative overflow-hidden hover:bg-[var(--bg-secondary)] border border-transparent hover:border-[var(--border-primary)]">
+                                <div className="text-[var(--text-secondary)] group-hover:text-[var(--accent)] group-hover:scale-110 transition-all duration-300">{option.icon}</div>
+                                <span className={`${textSizeClass} font-semibold mt-0.5 text-[var(--text-primary)]/70 group-hover:text-[var(--text-primary)] transition-colors truncate w-full text-center px-1`}>{option.label}</span>
                             </button>
-                        ))}
-                        {/* Fillers for empty slots */}
-                        {Array.from({ length: pageSize - optionsToShow.length }).map((_, i) => (
-                            <div key={`empty-${i}`} className="w-full h-full" />
                         ))}
                     </div>
-
-                    {/* Pagination Dots */}
                     {numPages > 1 && (
-                        <div className="relative z-10 flex items-center justify-center gap-2 mt-1 flex-shrink-0 h-5">
-                            <button 
-                                onClick={() => setPage(p => (p - 1 + numPages) % numPages)} 
-                                className="p-0.5 hover:text-[var(--accent)] disabled:opacity-30"
-                            >
-                                <ChevronLeftIcon className="w-3 h-3" />
-                            </button>
-                            <div className="flex gap-1">
-                                {Array.from({length: numPages}).map((_, i) => (
-                                    <button 
-                                        key={i}
-                                        onClick={() => setPage(i)}
-                                        className={`h-1.5 rounded-full transition-all duration-300 ${i === page ? 'bg-[var(--accent)] w-3' : 'bg-[var(--border-primary)] w-1.5'}`} 
-                                    />
-                                ))}
-                            </div>
-                            <button 
-                                onClick={() => setPage(p => (p + 1) % numPages)} 
-                                className="p-0.5 hover:text-[var(--accent)] disabled:opacity-30"
-                            >
-                                <ChevronRightIcon className="w-3 h-3" />
-                            </button>
+                        <div className="relative z-10 flex items-center justify-center gap-2 mt-1 flex-shrink-0 h-4">
+                            <button onClick={() => setPage(p => (p - 1 + numPages) % numPages)} className="p-0.5 hover:text-[var(--accent)]"><ChevronLeftIcon className="w-2.5 h-2.5" /></button>
+                            <div className="flex gap-1">{Array.from({length: numPages}).map((_, i) => <button key={i} onClick={() => setPage(i)} className={`h-1 rounded-full transition-all duration-300 ${i === page ? 'bg-[var(--accent)] w-2.5' : 'bg-[var(--border-primary)] w-1'}`} />)}</div>
+                            <button onClick={() => setPage(p => (p + 1) % numPages)} className="p-0.5 hover:text-[var(--accent)]"><ChevronRightIcon className="w-2.5 h-2.5" /></button>
                         </div>
                     )}
                 </>
             ) : (
-                /* List View */
                 <div className="relative z-10 flex-grow overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-1">
                     {allOptions.map(option => (
-                        <button
-                            key={option.type}
-                            onClick={() => onSelect(option.type as WidgetType)}
-                            className="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-[var(--bg-secondary)] border border-transparent hover:border-[var(--border-primary)] transition-all group text-left"
-                        >
-                            <div className="text-[var(--text-secondary)] group-hover:text-[var(--accent)]">
-                                {option.icon}
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-xs font-bold text-[var(--text-primary)]">{option.label}</span>
-                                <span className="text-[9px] text-[var(--text-secondary)]">{option.description}</span>
+                        <button key={option.type} onClick={() => onSelect(option.type as WidgetType)} className="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-[var(--bg-secondary)] border border-transparent hover:border-[var(--border-primary)] transition-all group text-left">
+                            <div className="text-[var(--text-secondary)] group-hover:text-[var(--accent)]">{option.icon}</div>
+                            <div className="flex flex-col overflow-hidden">
+                                <span className={`text-xs font-bold text-[var(--text-primary)] truncate`}>{option.label}</span>
+                                <span className="text-[9px] text-[var(--text-secondary)] truncate">{option.description}</span>
                             </div>
                         </button>
                     ))}
@@ -288,1199 +172,500 @@ export const WidgetSelectionView: React.FC<WidgetSelectionViewProps> = ({ onSele
     );
 };
 
-
-// Widget Wrapper
-interface WidgetWrapperProps {
-    title: string;
-    children: React.ReactNode;
-    noPadding?: boolean;
-}
-export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ title, children, noPadding = false }) => (
-    <div className={`relative w-full h-full bg-[var(--bg-secondary)] text-[var(--text-primary)] ${noPadding ? '' : 'p-4'}`}>
-        {children}
-    </div>
+interface WidgetWrapperProps { title: string; children: React.ReactNode; noPadding?: boolean; }
+export const WidgetWrapper: React.FC<WidgetWrapperProps> = ({ children, noPadding = false }) => (
+    <div className={`relative w-full h-full bg-[var(--bg-secondary)] text-[var(--text-primary)] ${noPadding ? '' : 'p-4'}`}>{children}</div>
 );
 
-// News Widget
-export const NewsWidget: React.FC = () => {
-    const [news, setNews] = useState<NewsItem[]>([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    const loadNews = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const items = await fetchNews();
-            if (items.length > 0) {
-                setNews(items);
-            } else {
-                setError("No news found.");
-            }
-        } catch (e) {
-            setError("Failed to fetch news.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        loadNews();
-    }, []);
-
-    const nextNews = () => {
-        if (news.length > 0) {
-            setCurrentIndex((prev) => (prev + 1) % news.length);
-        }
-    };
-
-    const currentItem = news[currentIndex];
-
-    return (
-        <div className="w-full h-full flex flex-col relative overflow-hidden bg-[var(--bg-secondary)]">
-            {/* Header */}
-            <div className="flex items-center justify-between p-3 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]">
-                <div className="flex items-center gap-2">
-                    <NewspaperIcon className="w-4 h-4 text-[var(--accent)]" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Latest News</span>
-                </div>
-                <button 
-                    onClick={loadNews} 
-                    className={`p-1.5 rounded-full hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-all btn-press ${loading ? 'animate-spin' : ''}`}
-                    title="Refresh"
-                >
-                    <RefreshIcon className="w-3 h-3" />
-                </button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-grow p-4 relative flex flex-col">
-                {loading ? (
-                    <div className="flex-grow flex items-center justify-center">
-                        <Spinner className="w-6 h-6 text-[var(--accent)]" />
-                    </div>
-                ) : error ? (
-                    <div className="flex-grow flex items-center justify-center text-center text-xs text-[var(--danger)]">
-                        {error}
-                    </div>
-                ) : currentItem ? (
-                    <div className="flex-grow flex flex-col justify-between animate-slide-fade" key={currentIndex}>
-                        <div>
-                            <a href={currentItem.url} target="_blank" rel="noopener noreferrer" className="block text-sm font-bold leading-snug mb-2 hover:text-[var(--accent)] transition-colors line-clamp-3">
-                                {currentItem.title}
-                            </a>
-                            <p className="text-xs text-[var(--text-secondary)] leading-relaxed line-clamp-4">
-                                {currentItem.summary}
-                            </p>
-                        </div>
-                        <div className="mt-3 flex justify-between items-end">
-                            <span className="text-[10px] font-mono text-[var(--text-secondary)] opacity-70 italic">
-                                {currentItem.source}
-                            </span>
-                            <div className="text-[10px] text-[var(--text-secondary)]">
-                                {currentIndex + 1} / {news.length}
-                            </div>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex-grow flex items-center justify-center text-xs text-[var(--text-secondary)]">
-                        No articles available.
-                    </div>
-                )}
-            </div>
-
-            {/* Controls */}
-            {!loading && !error && news.length > 0 && (
-                <div className="absolute bottom-3 right-3">
-                    <button 
-                        onClick={nextNews}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg hover:bg-[var(--accent)]/90 transition-all btn-press"
-                        title="Next Story"
-                    >
-                        <ArrowDownIcon className="w-4 h-4" />
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// 2048 Game Widget (unchanged)
-export const Game2048Widget: React.FC = () => {
-    // ... existing code for 2048 ...
-    const [grid, setGrid] = useState<number[][]>([[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
-    const [score, setScore] = useState(0);
-    const [gameOver, setGameOver] = useState(false);
-    const [hasWon, setHasWon] = useState(false);
-    const initialized = useRef(false);
-
-    // Initialize game
-    useEffect(() => {
-        if (!initialized.current) {
-            initializeGame();
-            initialized.current = true;
-        }
-    }, []);
-
-    const initializeGame = () => {
-        let newGrid = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
-        addRandomTile(newGrid);
-        addRandomTile(newGrid);
-        setGrid(newGrid);
-        setScore(0);
-        setGameOver(false);
-        setHasWon(false);
-    };
-
-    const addRandomTile = (currentGrid: number[][]) => {
-        const emptyCells = [];
-        for(let r=0; r<4; r++) {
-            for(let c=0; c<4; c++) {
-                if(currentGrid[r][c] === 0) emptyCells.push({r, c});
-            }
-        }
-        if(emptyCells.length > 0) {
-            const {r, c} = emptyCells[Math.floor(Math.random() * emptyCells.length)];
-            currentGrid[r][c] = Math.random() < 0.9 ? 2 : 4;
-        }
-    };
-
-    const move = (direction: 'up' | 'down' | 'left' | 'right') => {
-        if(gameOver) return;
-
-        let newGrid = grid.map(row => [...row]);
-        let moved = false;
-        let scoreGain = 0;
-
-        const slide = (row: number[]) => {
-            const filtered = row.filter(val => val !== 0);
-            const missing = 4 - filtered.length;
-            const zeros = Array(missing).fill(0);
-            return filtered.concat(zeros);
-        };
-
-        const combine = (row: number[]) => {
-            for (let i = 0; i < 3; i++) {
-                if (row[i] !== 0 && row[i] === row[i + 1]) {
-                    row[i] *= 2;
-                    scoreGain += row[i];
-                    row[i + 1] = 0;
-                    if(row[i] === 2048) setHasWon(true);
-                }
-            }
-            return row;
-        };
-
-        if (direction === 'left' || direction === 'right') {
-            for(let r=0; r<4; r++) {
-                let row = newGrid[r];
-                if (direction === 'right') row.reverse();
-                let original = [...row];
-                
-                row = slide(row);
-                row = combine(row);
-                row = slide(row); // Slide again after merge
-
-                if (direction === 'right') row.reverse();
-                newGrid[r] = row;
-                
-                if(JSON.stringify(newGrid[r]) !== JSON.stringify(grid[r])) moved = true;
-            }
-        } else {
-            // Transpose for up/down
-            for (let c=0; c<4; c++) {
-                let col = [newGrid[0][c], newGrid[1][c], newGrid[2][c], newGrid[3][c]];
-                if(direction === 'down') col.reverse();
-                
-                let original = [...col];
-                col = slide(col);
-                col = combine(col);
-                col = slide(col);
-                
-                if(direction === 'down') col.reverse();
-                
-                for(let r=0; r<4; r++) newGrid[r][c] = col[r];
-                if(JSON.stringify(col) !== JSON.stringify(original)) moved = true;
-            }
-        }
-
-        if (moved) {
-            addRandomTile(newGrid);
-            setGrid(newGrid);
-            setScore(prev => prev + scoreGain);
-            
-            let canMove = false;
-            for(let r=0; r<4; r++) {
-                for(let c=0; c<4; c++) {
-                    if(newGrid[r][c] === 0) canMove = true;
-                    if(c < 3 && newGrid[r][c] === newGrid[r][c+1]) canMove = true;
-                    if(r < 3 && newGrid[r][c] === newGrid[r+1][c]) canMove = true;
-                }
-            }
-            if (!canMove) setGameOver(true);
-        }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-            e.preventDefault(); 
-            const dirMap: {[key: string]: 'up'|'down'|'left'|'right'} = {
-                'ArrowUp': 'up', 'ArrowDown': 'down', 'ArrowLeft': 'left', 'ArrowRight': 'right'
-            };
-            move(dirMap[e.key]);
-        }
-    };
-
-    useEffect(() => {
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    });
-    
-    const getTileColor = (val: number) => {
-        const colors: {[key: number]: string} = {
-            0: 'bg-[var(--bg-secondary)]',
-            2: 'bg-[#eee4da] text-[#776e65]',
-            4: 'bg-[#ede0c8] text-[#776e65]',
-            8: 'bg-[#f2b179] text-white',
-            16: 'bg-[#f59563] text-white',
-            32: 'bg-[#f67c5f] text-white',
-            64: 'bg-[#f65e3b] text-white',
-            128: 'bg-[#edcf72] text-white text-xl',
-            256: 'bg-[#edcc61] text-white text-xl',
-            512: 'bg-[#edc850] text-white text-xl',
-            1024: 'bg-[#edc53f] text-white text-lg',
-            2048: 'bg-[#edc22e] text-white text-lg shadow-[0_0_30px_10px_rgba(243,215,116,0.4)]',
-        };
-        return colors[val] || 'bg-[#3c3a32] text-white';
-    }
-
-    return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-[#bbada0] rounded-lg relative overflow-hidden" tabIndex={0}>
-             <div className="flex justify-between w-full mb-2 px-1">
-                 <div className="text-2xl font-bold text-[#776e65] dark:text-white">2048</div>
-                 <div className="bg-[#8f7a66] rounded px-2 py-1 text-center min-w-[60px]">
-                     <div className="text-[10px] text-[#eee4da] font-bold uppercase">Score</div>
-                     <div className="text-white font-bold text-sm leading-none">{score}</div>
-                 </div>
-             </div>
-             
-             <div className="relative bg-[#bbada0] p-1 rounded w-full aspect-square grid grid-cols-4 gap-1.5 sm:gap-2">
-                 {grid.map((row, rIndex) => (
-                     row.map((val, cIndex) => (
-                         <div 
-                            key={`${rIndex}-${cIndex}`} 
-                            className={`rounded flex items-center justify-center font-bold text-2xl transition-all duration-100 ${getTileColor(val)}`}
-                        >
-                             {val > 0 ? val : ''}
-                         </div>
-                     ))
-                 ))}
-                 
-                 {(gameOver || hasWon) && (
-                    <div className="absolute inset-0 bg-[rgba(238,228,218,0.73)] flex flex-col items-center justify-center z-10 rounded animate-in fade-in">
-                        <div className="text-3xl font-bold text-[#776e65] mb-2">{hasWon ? 'You Win!' : 'Game Over'}</div>
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); initializeGame(); }} 
-                            className="px-4 py-2 bg-[#8f7a66] text-white font-bold rounded hover:bg-[#9f8b77] transition-colors btn-press"
-                        >
-                            Try Again
-                        </button>
-                    </div>
-                 )}
-             </div>
-             
-             <p className="text-[10px] text-[#776e65] dark:text-white/70 mt-2 text-center font-medium">Use arrow keys to merge tiles</p>
-        </div>
-    );
-};
-
-// Pomodoro Widget (unchanged code...)
 export const PomodoroWidget: React.FC = () => {
-    // ... existing PomodoroWidget code
     const [mode, setMode] = useState<'work' | 'break'>('work');
     const [time, setTime] = useState(25 * 60);
     const [isActive, setIsActive] = useState(false);
-    const [isHidden, setIsHidden] = useState(false);
-    const [isAlerting, setIsAlerting] = useState(false);
-    const [randomBg, setRandomBg] = useState('https://source.unsplash.com/random/400x400/?nature,water,forest');
-    
     useEffect(() => {
-        if (isHidden) {
-            setRandomBg(`https://source.unsplash.com/random/400x400/?nature,landscape,calm&t=${Date.now()}`);
-        }
-    }, [isHidden]);
-
-    useEffect(() => {
-        let interval: number | undefined;
-        if (isActive && time > 0) {
-            interval = window.setInterval(() => setTime(t => t - 1), 1000);
-        } else if (isActive && time === 0) {
-            setIsActive(false);
-            setIsHidden(false);
-            setIsAlerting(true);
-            setTimeout(() => setIsAlerting(false), 800);
-            
-            if (mode === 'work') {
-                setMode('break');
-                setTime(5 * 60);
-            } else {
-                setMode('work');
-                setTime(25 * 60);
-            }
-        }
-        return () => window.clearInterval(interval);
-    }, [isActive, time, mode]);
-
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    };
-
-    const resetTimer = () => {
-        setIsActive(false);
-        setMode('work');
-        setTime(25 * 60);
-    };
-
-    const startBreak = () => {
-        setIsActive(true);
-        setMode('break');
-        setTime(5 * 60);
-    };
-
-    if (isHidden) {
-        return (
-            <div 
-                className="w-full h-full flex flex-col items-center justify-center text-center text-white cursor-pointer relative overflow-hidden"
-                onClick={() => setIsHidden(false)}
-            >
-                <div className="absolute inset-0 z-0">
-                    <img src={randomBg} alt="Relaxing Background" className="w-full h-full object-cover transition-transform duration-10000 hover:scale-110" />
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"></div>
-                </div>
-                
-                <div className="relative z-10 flex flex-col items-center animate-in fade-in duration-500">
-                    <div className="p-3 bg-white/10 rounded-full backdrop-blur-md mb-2 border border-white/20 shadow-lg">
-                        <EyeIcon className="w-6 h-6" />
-                    </div>
-                    <p className="font-bold text-sm drop-shadow-md">Timer Hidden</p>
-                    <p className="text-xs opacity-80 drop-shadow-md">Stay focused</p>
-                </div>
-            </div>
-        );
-    }
-
-    const isWorkSession = mode === 'work';
-    const bgColor = isWorkSession ? 'bg-[#FF6347]' : 'bg-[var(--success)]';
-
+        let interval: ReturnType<typeof setInterval>;
+        if (isActive && time > 0) interval = setInterval(() => setTime((prev) => prev <= 1 ? 0 : prev - 1), 1000);
+        return () => clearInterval(interval);
+    }, [isActive, time]);
+    const minutes = Math.floor(time / 60).toString().padStart(2, '0');
+    const seconds = (time % 60).toString().padStart(2, '0');
     return (
-        <div className={`relative w-full h-full flex flex-col items-center justify-center text-center text-white transition-colors duration-500 ${bgColor} ${isAlerting ? 'pomodoro-alert' : ''}`}>
-            <button onClick={() => setIsHidden(true)} className="absolute top-2 right-2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 btn-press transition-all" title="Hide Timer">
-                <EyeSlashIcon className="w-4 h-4" />
-            </button>
-            <p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-1">{isWorkSession ? 'Focus Session' : 'Break Time'}</p>
-            <p className="text-5xl font-mono font-medium tracking-tight mb-4">{formatTime(time)}</p>
-            
-            <div className="flex items-center gap-2">
-                <button 
-                    onClick={() => setIsActive(!isActive)} 
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm transition-all btn-press border border-white/10"
-                    title={isActive ? 'Pause' : 'Start'}
-                >
-                    {isActive ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5 ml-0.5" />}
-                </button>
-                
-                <button onClick={resetTimer} className="px-3 py-1.5 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-all btn-press border border-white/5">
-                    Reset
-                </button>
-                
-                <button onClick={startBreak} className="px-3 py-1.5 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-all btn-press border border-white/5">
-                    Skip
-                </button>
+        <div className="w-full h-full flex flex-col items-center justify-between p-4">
+            <div className="flex bg-[var(--bg-primary)] rounded-lg p-1 border border-[var(--border-primary)] w-full gap-1">
+                <button onClick={() => { setIsActive(false); setMode('work'); setTime(25*60); }} className={`flex-1 py-1 text-[10px] font-bold uppercase rounded ${mode === 'work' ? 'bg-red-500 text-white' : 'text-[var(--text-secondary)]'}`}>Focus</button>
+                <button onClick={() => { setIsActive(false); setMode('break'); setTime(5*60); }} className={`flex-1 py-1 text-[10px] font-bold uppercase rounded ${mode === 'break' ? 'bg-emerald-500 text-white' : 'text-[var(--text-secondary)]'}`}>Break</button>
+            </div>
+            <div className="text-6xl font-mono font-bold text-[var(--text-primary)]">{minutes}:{seconds}</div>
+            <div className="flex gap-2 w-full">
+                <button onClick={() => setIsActive(!isActive)} className={`flex-1 py-2.5 rounded-xl text-white ${mode === 'work' ? 'bg-red-500' : 'bg-emerald-500'}`}>{isActive ? <PauseIcon className="mx-auto" /> : <PlayIcon className="mx-auto" />}</button>
+                <button onClick={() => { setIsActive(false); setTime(mode === 'work' ? 25*60 : 5*60); }} className="p-2.5 rounded-xl border border-[var(--border-primary)]"><ArrowPathIcon /></button>
             </div>
         </div>
     );
 };
 
-// Image Widget (unchanged)
-interface ImageWidgetProps { data: { url?: string }; onChange: (data: { url: string }) => void; }
-export const ImageWidget: React.FC<ImageWidgetProps> = ({ data, onChange }) => {
-    // ... existing ImageWidget code
-    const [url, setUrl] = useState(data?.url || '');
-    const [isDraggingOver, setIsDraggingOver] = useState(false);
+export const ImageWidget: React.FC<{ data?: { url: string }, onChange?: (data: any) => void }> = ({ data, onChange }) => (
+    <div className="p-2 h-full flex flex-col">
+        {data?.url ? <img src={data.url} className="w-full h-full object-contain" /> : <div className="flex items-center justify-center h-full text-xs text-gray-400">No Image</div>}
+        <input type="text" value={data?.url || ''} onChange={(e) => onChange && onChange({ url: e.target.value })} placeholder="URL" className="w-full mt-2 p-1 text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded" />
+    </div>
+);
 
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDraggingOver(false);
+export const HyperlinkWidget: React.FC<{ data?: { url: string, text: string }, onChange: (data: any) => void }> = ({ data, onChange }) => (
+    <div className="p-2">
+        <a href={data?.url} target="_blank" className="text-blue-400 hover:underline">{data?.text || 'Link'}</a>
+        <input type="text" value={data?.url || ''} onChange={(e) => onChange({ ...data, url: e.target.value })} placeholder="URL" className="w-full mt-2 p-1 text-xs bg-[var(--bg-primary)] rounded" />
+        <input type="text" value={data?.text || ''} onChange={(e) => onChange({ ...data, text: e.target.value })} placeholder="Text" className="w-full mt-1 p-1 text-xs bg-[var(--bg-primary)] rounded" />
+    </div>
+);
 
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const file = e.dataTransfer.files[0];
-            if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = (loadEvent) => {
-                    if (loadEvent.target && typeof loadEvent.target.result === 'string') {
-                        onChange({ url: loadEvent.target.result });
-                    }
-                };
-                reader.readAsDataURL(file);
-                return;
-            }
-        }
-
-        try {
-            let url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/html');
-            if (url) {
-                if (e.dataTransfer.getData('text/html')) {
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = url;
-                    const img = tempDiv.querySelector('img');
-                    if (img && img.src) {
-                        url = img.src;
-                    }
-                }
-                if (url && (url.startsWith('http') || url.startsWith('data:image'))) {
-                    onChange({ url });
-                    return;
-                }
-            }
-            const plainUrl = e.dataTransfer.getData('text/plain');
-            if (plainUrl && (plainUrl.startsWith('http') || plainUrl.startsWith('data:image'))) {
-                onChange({ url: plainUrl });
-                return;
-            }
-        } catch (error) {
-            console.error("Error handling dropped URL:", error);
-        }
-    };
-
+export const StickyNoteWidget: React.FC<{ data?: { notes: string[] }, onChange: (data: any) => void }> = ({ data, onChange }) => {
+    const notes = data?.notes || ['']; // Start with 1 note
+    const colors = ['bg-yellow-200', 'bg-blue-200', 'bg-pink-200', 'bg-green-200', 'bg-purple-200', 'bg-orange-200'];
+    const updateNote = (i: number, v: string) => { const n = [...notes]; n[i] = v; onChange({ notes: n }); };
+    const addNote = () => { if (notes.length < 6) onChange({ notes: [...notes, ''] }); };
+    const removeNote = (i: number) => { if (notes.length > 1) onChange({ notes: notes.filter((_, idx) => idx !== i) }); };
+    
     return (
-        <div 
-            className={`w-full h-full flex flex-col items-center justify-center p-2 rounded-lg relative overflow-hidden group border-2 border-dashed transition-all ${isDraggingOver ? 'border-[var(--accent)] bg-[var(--highlight-kp-bg)]' : 'border-transparent'}`}
-            onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
-            onDragLeave={() => setIsDraggingOver(false)}
-            onDrop={handleDrop}
-        >
-            {data?.url ? (
-                <img src={data.url} alt="Widget" className="w-full h-full object-cover rounded-md pointer-events-none" />
-            ) : (
-                <div className="flex flex-col items-center text-[var(--text-secondary)] opacity-50">
-                    <ImageIcon className="w-8 h-8 mb-2" />
-                    <span className="text-xs">Drop Image Here</span>
+        <div className="w-full h-full p-2 grid grid-cols-2 gap-2 overflow-y-auto custom-scrollbar content-start">
+            {notes.map((note, i) => (
+                <div key={i} className={`relative aspect-square rounded-xl ${colors[i % colors.length]} shadow-md p-2 group overflow-hidden border border-black/5`}>
+                    <textarea 
+                        value={note} 
+                        onChange={e => updateNote(i, e.target.value)} 
+                        className="w-full h-full bg-transparent border-none text-[10px] font-bold text-black/70 outline-none resize-none placeholder:text-black/20" 
+                        placeholder="Type..." 
+                    />
+                    {notes.length > 1 && (
+                        <button 
+                            onClick={() => removeNote(i)}
+                            className="absolute top-1 right-1 p-0.5 bg-black/10 rounded-full opacity-0 group-hover:opacity-100 hover:bg-black/20 transition-opacity"
+                        >
+                            <CloseIcon className="w-2 h-2 text-black/50" />
+                        </button>
+                    )}
                 </div>
+            ))}
+            {notes.length < 6 && (
+                <button 
+                    onClick={addNote}
+                    className="aspect-square rounded-xl border-2 border-dashed border-[var(--border-primary)] flex items-center justify-center text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all"
+                >
+                    <PlusIcon className="w-6 h-6" />
+                </button>
             )}
         </div>
     );
 };
 
-// Hyperlink Widget (unchanged)
-interface HyperlinkWidgetProps { data: { url?: string, text?: string }; onChange: (data: { url: string, text: string }) => void; }
-export const HyperlinkWidget: React.FC<HyperlinkWidgetProps> = ({ data, onChange }) => {
-    // ... existing HyperlinkWidget code
-    const [isEditing, setIsEditing] = useState(!data?.url);
-    const [url, setUrl] = useState(data?.url || '');
-    const [text, setText] = useState(data?.text || '');
+export const MusicPlayerWidget: React.FC<{ data?: any, onChange?: (data: any) => void }> = ({ data }) => (
+    <div className="p-2 h-full flex flex-col justify-between">
+        <div><p className="font-bold truncate">{data?.queue?.[0]?.title || 'No song'}</p></div>
+        <audio controls className="w-full" />
+    </div>
+);
 
-    const handleSave = () => {
-        onChange({ url, text: text || url });
-        setIsEditing(false);
-    };
+export const ToDoListWidget: React.FC<{ data?: { todos: ToDoItem[] }, onChange: (data: any) => void }> = ({ data, onChange }) => (
+    <ToDoList todos={data?.todos || []} onChange={(todos) => onChange({ todos })} isWidget />
+);
 
-    return (
-        <div className="w-full h-full flex flex-col p-4">
-             <div className="flex justify-between items-center mb-2">
-                 <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-                     <LinkIcon className="w-4 h-4" />
-                     <span className="text-xs font-bold uppercase">Link</span>
-                 </div>
-                 {!isEditing && <button onClick={() => setIsEditing(true)} className="text-xs hover:text-[var(--accent)]">Edit</button>}
-             </div>
-             
-             {isEditing ? (
-                 <div className="flex flex-col gap-2 h-full justify-center">
-                     <input 
-                         type="text" 
-                         placeholder="URL (https://...)" 
-                         value={url} 
-                         onChange={e => setUrl(e.target.value)}
-                         className="w-full p-1 text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded"
-                     />
-                     <input 
-                         type="text" 
-                         placeholder="Label" 
-                         value={text} 
-                         onChange={e => setText(e.target.value)}
-                         className="w-full p-1 text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded"
-                     />
-                     <button onClick={handleSave} className="w-full py-1 bg-[var(--accent)] text-white text-xs rounded">Save</button>
-                 </div>
-             ) : (
-                 <a href={url} target="_blank" rel="noopener noreferrer" className="flex-grow flex items-center justify-center text-center p-2 hover:bg-[var(--bg-primary)] rounded-lg border border-[var(--border-primary)] transition-all group">
-                     <div>
-                         <div className="text-lg font-bold text-[var(--accent)] group-hover:underline">{text}</div>
-                         <div className="text-[10px] text-[var(--text-secondary)] truncate max-w-[120px]">{url}</div>
-                     </div>
-                 </a>
-             )}
-        </div>
-    );
-};
-
-// Sticky Note Widget (unchanged)
-interface StickyNoteWidgetProps { data: { notes?: string[] }; onChange: (data: { notes: string[] }) => void; }
-export const StickyNoteWidget: React.FC<StickyNoteWidgetProps> = ({ data, onChange }) => {
-    // ... existing StickyNoteWidget code
-    const [note, setNote] = useState(data?.notes?.[0] || '');
-    
-    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        setNote(e.target.value);
-        onChange({ notes: [e.target.value] });
-    };
-
-    return (
-        <div className="w-full h-full bg-[#fef3c7] text-gray-800 p-3 relative flex flex-col font-handwriting">
-            <div className="w-full h-4 bg-[#fde68a] absolute top-0 left-0 opacity-50"></div>
-            <textarea 
-                className="w-full h-full bg-transparent resize-none outline-none text-sm pt-4" 
-                value={note}
-                onChange={handleChange}
-                placeholder="Type a note..."
-            />
-        </div>
-    );
-};
-
-// Music Player Widget (unchanged)
-export const MusicPlayerWidget: React.FC<any> = () => {
-    return (
-        <div className="w-full h-full flex items-center justify-center bg-black/5 p-4 rounded-lg">
-             <div className="text-center">
-                 <MusicNoteIcon className="w-8 h-8 mx-auto mb-2 text-[var(--accent)]" />
-                 <p className="text-xs text-[var(--text-secondary)]">Drop Audio Files Here</p>
-             </div>
-        </div>
-    );
-};
-
-// Spotify Widget (unchanged)
-const PLAYLIST_LIBRARIES = [
-    { id: 'lofi', name: 'Lo-Fi Beats', color: '#8b5cf6', url: 'https://open.spotify.com/embed/playlist/37i9dQZF1DWWQRwui0ExPn' },
-    { id: 'focus', name: 'Deep Focus', color: '#3b82f6', url: 'https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ' },
-    { id: 'piano', name: 'Peaceful Piano', color: '#10b981', url: 'https://open.spotify.com/embed/playlist/37i9dQZF1DX4sWSpwq3LiO' },
-    { id: 'nature', name: 'Nature Sounds', color: '#f59e0b', url: 'https://open.spotify.com/embed/playlist/37i9dQZF1DX4PP3DA4J0N8' },
-    { id: 'classical', name: 'Classical', color: '#ef4444', url: 'https://open.spotify.com/embed/playlist/37i9dQZF1DWWEJlAGA9gs0' },
-    { id: 'jazz', name: 'Jazz Vibes', color: '#ec4899', url: 'https://open.spotify.com/embed/playlist/37i9dQZF1DXbITwg1ZjkYt' }
-];
-
-interface SpotifyWidgetProps { data: { url?: string }; onChange: (data: { url: string }) => void; }
-export const SpotifyWidget: React.FC<SpotifyWidgetProps> = ({ data, onChange }) => {
-    // ... existing SpotifyWidget code
-    const [url, setUrl] = useState(data?.url || '');
-    const [embedUrl, setEmbedUrl] = useState('');
-    const [view, setView] = useState<'player' | 'library' | 'custom'>(data?.url ? 'player' : 'library');
-    const [customInput, setCustomInput] = useState('');
-
-    useEffect(() => {
-        if (data?.url) {
-            const processed = processUrl(data.url);
-            setEmbedUrl(processed);
-            setView('player');
-        } else {
-            setView('library');
-        }
-    }, [data?.url]);
-
-    const processUrl = (rawUrl: string) => {
-        if (!rawUrl) return '';
-        if (rawUrl.includes('/embed/')) return rawUrl;
-        const parts = rawUrl.split('.com/');
-        if (parts.length > 1) {
-            return `https://open.spotify.com/embed/${parts[1]}`;
-        }
-        return rawUrl;
-    };
-
-    const handleLibrarySelect = (libUrl: string) => {
-        onChange({ url: libUrl });
-    };
-
-    const handleCustomSave = () => {
-        if (customInput) {
-            onChange({ url: customInput });
-        }
-    };
-
-    if (view === 'player' && embedUrl) {
-        return (
-            <div className="w-full h-full relative group bg-black">
-                <iframe 
-                    src={embedUrl} 
-                    width="100%" 
-                    height="100%" 
-                    frameBorder="0" 
-                    allow="encrypted-media" 
-                    className="absolute inset-0"
-                    title="Spotify Embed"
-                ></iframe>
-                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    <button 
-                        onClick={() => setView('library')} 
-                        className="p-1.5 bg-black/60 text-white rounded-full hover:bg-black/80 backdrop-blur-md"
-                        title="Change Playlist"
-                    >
-                        <QueueListIcon className="w-3 h-3" />
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    if (view === 'custom') {
-        return (
-             <div className="w-full h-full flex flex-col items-center justify-center p-4 gap-3 bg-[var(--bg-secondary)]">
-                 <div className="flex items-center gap-2 w-full">
-                    <button onClick={() => setView('library')} className="p-1 hover:bg-[var(--border-primary)] rounded"><ChevronLeftIcon className="w-4 h-4" /></button>
-                    <span className="text-xs font-bold uppercase text-[var(--text-secondary)]">Custom Link</span>
-                 </div>
-                 <SpotifyIcon className="w-8 h-8 text-[#1DB954]" />
-                 <input 
-                     type="text" 
-                     placeholder="Spotify Link..." 
-                     value={customInput} 
-                     onChange={e => setCustomInput(e.target.value)}
-                     className="w-full p-2 text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded focus:ring-1 focus:ring-[#1DB954] outline-none"
-                 />
-                 <button onClick={handleCustomSave} className="w-full py-1.5 bg-[#1DB954] text-white text-xs font-bold rounded hover:opacity-90">Load</button>
-             </div>
-        );
-    }
-
-    // Library View
-    return (
-        <div className="w-full h-full flex flex-col bg-[var(--bg-secondary)] overflow-hidden">
-            <div className="p-3 border-b border-[var(--border-primary)] flex justify-between items-center bg-[var(--bg-primary)]">
-                <span className="text-xs font-bold uppercase text-[var(--text-secondary)] flex items-center gap-2">
-                    <SpotifyIcon className="w-4 h-4 text-[#1DB954]" /> Library
-                </span>
-                <button onClick={() => setView('custom')} className="text-[10px] text-[var(--accent)] hover:underline">Paste Link</button>
-            </div>
-            <div className="flex-grow overflow-y-auto custom-scrollbar p-2 grid grid-cols-2 gap-2 content-start">
-                {PLAYLIST_LIBRARIES.map(lib => (
-                    <button
-                        key={lib.id}
-                        onClick={() => handleLibrarySelect(lib.url)}
-                        className="relative aspect-[1.2] rounded-lg overflow-hidden group flex flex-col justify-end p-2 transition-transform hover:scale-[1.02]"
-                        style={{ backgroundColor: lib.color }}
-                    >
-                        <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
-                        <span className="relative z-10 text-white text-[10px] font-bold leading-tight text-left">{lib.name}</span>
-                        <div className="absolute top-2 right-2 opacity-50">
-                            <MusicNoteIcon className="w-3 h-3 text-white" />
-                        </div>
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-// ToDo List Widget Wrapper (unchanged)
-export const ToDoListWidget: React.FC<any> = ({ data, onChange }) => {
-    return <ToDoList todos={data?.todos || []} onChange={(todos) => onChange({ todos })} isWidget={true} />;
-};
-
-// Terminal Widget (unchanged)
-export const TerminalWidget: React.FC<any> = ({ data, onCommand }) => {
-    // ... existing TerminalWidget code
+export const TerminalWidget: React.FC<{ data?: any, onCommand: any, onClose?: () => void }> = ({ data, onCommand, onClose }) => {
     const [input, setInput] = useState('');
-    const bottomRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [data?.history]);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!input.trim()) return;
-        const parts = input.trim().split(' ');
-        const cmd = parts[0];
-        const args = parts.slice(1);
-        onCommand(cmd, args);
-        setInput('');
-    };
-
     return (
-        <div className="w-full h-full bg-[#1e1e1e] text-green-400 font-mono text-xs p-2 overflow-hidden flex flex-col">
-            <div className="flex-grow overflow-y-auto custom-scrollbar p-1">
-                {data?.history?.map((line: string, i: number) => (
-                    <div key={i} className="whitespace-pre-wrap mb-1">{line}</div>
-                ))}
-                <div ref={bottomRef} />
-            </div>
-            <form onSubmit={handleSubmit} className="flex gap-1 border-t border-white/20 pt-2 mt-1">
-                <span className="text-blue-400">$</span>
-                <input 
-                    type="text" 
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    className="flex-grow bg-transparent outline-none text-white"
-                    autoFocus
-                />
-            </form>
-        </div>
-    );
-};
-
-// Google Search Widget - Updated to use SimpleMarkdown & onChange sync
-export const GoogleSearchWidget: React.FC<any> = ({ data, onSearch, onChange, onExpand }) => {
-    const [query, setQuery] = useState(data?.query || '');
-
-    // Sync local state when prop updates (e.g. from expanded view)
-    useEffect(() => {
-        if (data?.query !== undefined && data?.query !== query) {
-            setQuery(data.query);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [data?.query]);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (query.trim()) onSearch(query);
-    };
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value;
-        setQuery(val);
-        if(onChange) onChange({ ...data, query: val });
-    }
-
-    return (
-        <div className="w-full h-full flex flex-col p-3 relative group">
-             {/* Expand Button */}
-             {onExpand && (
+        <div className="p-2 bg-black text-green-400 font-mono text-[10px] h-full flex flex-col relative group">
+            {onClose && (
                 <button 
-                    onClick={onExpand}
-                    className="absolute top-2 right-2 p-1 rounded-full bg-[var(--bg-secondary)] hover:bg-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] z-10 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Expand"
+                    onClick={onClose} 
+                    className="absolute top-1 right-1 p-1 hover:bg-white/10 rounded text-green-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                    <ArrowsPointingOutIcon className="w-4 h-4" />
+                    <CloseIcon className="w-3 h-3" />
                 </button>
-             )}
-
-             <form onSubmit={handleSubmit} className="relative mb-3 flex-shrink-0">
-                 <input 
-                    type="text" 
-                    value={query} 
-                    onChange={handleInputChange} 
-                    placeholder="Search Google..."
-                    className="w-full pl-8 pr-8 py-2 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-full text-xs focus:ring-1 focus:ring-[var(--accent)] outline-none"
-                 />
-                 <GoogleIcon className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2" />
-             </form>
-             
-             <div className="flex-grow overflow-y-auto custom-scrollbar text-xs">
-                 {data?.loading ? (
-                     <div className="flex justify-center p-4"><Spinner className="w-5 h-5 text-[var(--accent)]" /></div>
-                 ) : data?.text ? (
-                     <div className="space-y-2">
-                         <SimpleMarkdown content={data.text} />
-                         {data.sources && data.sources.length > 0 && (
-                             <div className="mt-2 pt-2 border-t border-[var(--border-primary)]">
-                                 <p className="font-bold mb-1">Sources:</p>
-                                 <ul className="list-disc pl-4">
-                                     {data.sources.map((s: any, i: number) => (
-                                         <li key={i}><a href={s.uri} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline truncate block">{s.title || s.uri}</a></li>
-                                     ))}
-                                 </ul>
-                             </div>
-                         )}
-                     </div>
-                 ) : (
-                     <div className="text-center text-[var(--text-secondary)] mt-4">Results will appear here</div>
-                 )}
-                 {data?.error && <p className="text-[var(--danger)]">{data.error}</p>}
-             </div>
+            )}
+            <div className="flex-grow overflow-y-auto">{data?.history?.map((l: string, i: number) => <div key={i}>{l}</div>)}</div>
+            <div className="flex"><span>></span><input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if(e.key==='Enter') { onCommand(input.split(' ')[0], []); setInput(''); } }} className="bg-transparent outline-none ml-1 flex-grow" /></div>
         </div>
     );
 };
 
-// ChatGPT Widget - Updated to use SimpleMarkdown & Sync State
-export const ChatGPTWidget: React.FC<any> = ({ data, onChange, onExpand }) => {
-    const [input, setInput] = useState('');
-    const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string }[]>(data?.messages || []);
-    const [loading, setLoading] = useState(false);
+export const GoogleSearchWidget: React.FC<{ data?: any, onSearch: any, onExpand?: any, isOnline?: boolean, onChange?: any }> = ({ data, onSearch, onExpand, isOnline = true }) => {
+    if (!isOnline) return <OfflinePlaceholder label="Connection" />;
+    return (
+        <div className="p-2 h-full flex flex-col relative group">
+            {onExpand && (
+                <button onClick={onExpand} className="absolute top-2 right-2 p-1 hover:bg-[var(--bg-primary)] rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    <ArrowsPointingOutIcon className="w-3 h-3 text-[var(--text-secondary)]" />
+                </button>
+            )}
+            <form onSubmit={e => { e.preventDefault(); onSearch(e.currentTarget.q.value); }} className="flex gap-1 pr-6">
+                <input name="q" placeholder="Search..." className="flex-grow p-1 text-xs bg-[var(--bg-primary)] rounded" />
+                <button className="p-1 bg-blue-500 text-white rounded"><MagnifyingGlassIcon className="w-3 h-3"/></button>
+            </form>
+            <div className="mt-2 text-[10px] overflow-y-auto flex-grow">
+                <SimpleMarkdown content={data?.text || ''} />
+                
+                {/* Fixed: Extracting and displaying URLs from groundingChunks as required by Gemini API guidelines */}
+                {data?.sources && data.sources.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-[var(--border-primary)]/30">
+                        <span className="text-[8px] font-black uppercase text-[var(--text-secondary)] block mb-1">Sources</span>
+                        <div className="flex flex-col gap-1">
+                            {data.sources.map((chunk: any, idx: number) => {
+                                if (chunk.web) {
+                                    return (
+                                        <a key={idx} href={chunk.web.uri} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline flex items-center gap-1 truncate">
+                                            <GlobeIcon className="w-2.5 h-2.5 shrink-0" />
+                                            <span className="truncate">{chunk.web.title || chunk.web.uri}</span>
+                                        </a>
+                                    );
+                                }
+                                return null;
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
+            {data?.loading && <WidgetLoadingOverlay label="Searching..." />}
+        </div>
+    );
+};
+
+export const ChatGPTWidget: React.FC<{ data?: any, onChange: any, isOnline?: boolean, onExpand?: () => void }> = ({ data, onChange, isOnline = true, onExpand }) => {
+    if (!isOnline) return <OfflinePlaceholder label="AI Service" />;
+    const [msg, setMsg] = useState('');
+    const [copySuccess, setCopySuccess] = useState<number | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    // Sync local state when prop updates
-    useEffect(() => {
-        if (data?.messages && JSON.stringify(data.messages) !== JSON.stringify(messages)) {
-            setMessages(data.messages);
+    const send = async (text: string) => { 
+        if (!text.trim()) return;
+        const currentHistory = data?.history || [];
+        const newHistory = [...currentHistory, { role: 'user', text: text }]; 
+        onChange({...data, history: newHistory, loading: true}); 
+        setMsg(''); 
+        
+        try {
+            const response = await performChat(text, currentHistory); 
+            onChange({
+                ...data, 
+                history: [...newHistory, { 
+                    role: 'model', 
+                    text: response.text, 
+                    sources: response.sources,
+                    followUps: response.followUps 
+                }], 
+                loading: false
+            }); 
+        } catch (e) {
+            onChange({...data, loading: false});
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [data?.messages]);
+    };
 
     useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [messages, loading]);
+    }, [data?.history, data?.loading]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!input.trim() || loading) return;
-
-        const userMsg = input.trim();
-        const newMessages = [...messages, { role: 'user' as const, text: userMsg }];
-        
-        setMessages(newMessages);
-        setInput('');
-        setLoading(true);
-        onChange({ messages: newMessages }); // Persist user message
-
-        try {
-            const response = await performChat(userMsg, messages);
-            const updatedMessages = [...newMessages, { role: 'model' as const, text: response }];
-            setMessages(updatedMessages);
-            onChange({ messages: updatedMessages }); // Persist AI response
-        } catch (error) {
-            console.error("Chat error", error);
-        } finally {
-            setLoading(false);
-        }
+    const handleCopy = (text: string, index: number) => {
+        navigator.clipboard.writeText(text);
+        setCopySuccess(index);
+        setTimeout(() => setCopySuccess(null), 2000);
     };
 
     return (
-        <div className="w-full h-full flex flex-col relative group bg-[var(--bg-secondary)] overflow-hidden">
-             {/* Header with Expand */}
-             <div className="flex justify-between items-center p-2 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]">
-                 <div className="flex items-center gap-2 text-xs font-bold uppercase text-[var(--text-secondary)]">
-                     <ChatBubbleLeftRightIcon className="w-4 h-4 text-[var(--accent)]" /> ChatGPT
-                 </div>
-                 {onExpand && (
-                    <button 
-                        onClick={onExpand}
-                        className="p-1 rounded-full hover:bg-[var(--border-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                        title="Expand"
-                    >
-                        <ArrowsPointingOutIcon className="w-3 h-3" />
-                    </button>
-                 )}
-             </div>
-
-             {/* Messages Area */}
-             <div ref={scrollRef} className="flex-grow overflow-y-auto p-3 space-y-3 custom-scrollbar text-xs">
-                 {messages.length === 0 && (
-                     <div className="text-center text-[var(--text-secondary)] opacity-60 mt-4">
-                         Start a conversation...
-                     </div>
-                 )}
-                 {messages.map((msg, i) => (
-                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} message-enter`}>
-                         <div className={`max-w-[90%] p-2.5 rounded-2xl shadow-sm ${
-                             msg.role === 'user' 
-                                 ? 'bg-[var(--accent)] text-white rounded-br-none' 
-                                 : 'bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[var(--text-primary)] rounded-bl-none'
-                         }`}>
-                             <SimpleMarkdown content={msg.text} />
-                         </div>
-                     </div>
-                 ))}
-                 {loading && (
-                     <div className="flex justify-start message-enter">
-                         <div className="bg-[var(--bg-primary)] border border-[var(--border-primary)] px-3 py-2 rounded-2xl rounded-bl-none">
-                             <div className="flex gap-1">
-                                 <div className="w-1.5 h-1.5 bg-[var(--text-secondary)] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                 <div className="w-1.5 h-1.5 bg-[var(--text-secondary)] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                 <div className="w-1.5 h-1.5 bg-[var(--text-secondary)] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                             </div>
-                         </div>
-                     </div>
-                 )}
-             </div>
-
-             {/* Input Area */}
-             <form onSubmit={handleSubmit} className="p-2 border-t border-[var(--border-primary)] bg-[var(--bg-primary)] flex gap-2">
-                 <input 
-                     type="text" 
-                     value={input}
-                     onChange={e => setInput(e.target.value)}
-                     placeholder="Type a message..."
-                     className="flex-grow bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
-                 />
-                 <button 
-                    type="submit" 
-                    disabled={loading || !input.trim()}
-                    className="p-1.5 bg-[var(--accent)] text-white rounded-lg hover:opacity-90 disabled:opacity-50"
-                 >
-                     <ForwardIcon className="w-3 h-3" />
-                 </button>
-             </form>
-        </div>
-    );
-};
-
-// Dictionary Widget (unchanged)
-export const DictionaryWidget: React.FC<any> = ({ data, onChange }) => {
-    // ... existing DictionaryWidget code
-    const [word, setWord] = useState('');
-    const [result, setResult] = useState<DictionaryResult | null>(data?.result || null);
-    const [loading, setLoading] = useState(false);
-
-    const handleLookup = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if(!word.trim()) return;
-        setLoading(true);
-        try {
-            const res = await lookupDictionary(word);
-            setResult(res);
-            onChange({ result: res });
-        } catch(e) {
-            setResult(null);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="w-full h-full flex flex-col p-3">
-            <form onSubmit={handleLookup} className="flex gap-2 mb-2">
-                <input 
-                    type="text" 
-                    value={word} 
-                    onChange={e => setWord(e.target.value)} 
-                    placeholder="Define..." 
-                    className="flex-grow min-w-0 p-1.5 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded text-xs outline-none"
-                />
-                <button type="submit" disabled={loading} className="p-1.5 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded hover:bg-[var(--bg-secondary)]">
-                    <MagnifyingGlassIcon className="w-4 h-4" />
-                </button>
-            </form>
-            <div className="flex-grow overflow-y-auto custom-scrollbar text-xs">
-                {loading ? <Spinner className="w-4 h-4 mx-auto" /> : result ? (
-                    <div>
-                        <div className="font-bold text-sm mb-1">{result.word} <span className="text-[var(--text-secondary)] font-normal text-xs">{result.phonetic}</span></div>
-                        {result.meanings.map((m, i) => (
-                            <div key={i} className="mb-2">
-                                <div className="italic text-[var(--text-secondary)] mb-0.5">{m.partOfSpeech}</div>
-                                <ul className="list-disc pl-4 space-y-1">
-                                    {m.definitions.slice(0, 2).map((d, j) => (
-                                        <li key={j}>
-                                            {d.definition}
-                                            {d.example && <div className="text-[var(--text-secondary)] mt-0.5">"{d.example}"</div>}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ))}
+        <div className="h-full flex flex-col relative group bg-[var(--bg-secondary)] overflow-hidden">
+            {/* Refactored Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--bg-primary)]/50 backdrop-blur-sm shrink-0">
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-[var(--accent)]/10 rounded-lg text-[var(--accent)]">
+                        <ChatBubbleLeftRightIcon className="w-4 h-4" />
                     </div>
-                ) : (
-                    <div className="text-center text-[var(--text-secondary)] mt-4">Look up a word</div>
+                    <span className="text-xs font-bold text-[var(--text-primary)]">AI Assistant</span>
+                </div>
+                {onExpand && (
+                    <button onClick={onExpand} className="p-1.5 hover:bg-[var(--bg-secondary)] rounded text-[var(--text-secondary)] transition-colors">
+                        <ArrowsPointingOutIcon className="w-3.5 h-3.5" />
+                    </button>
                 )}
             </div>
-        </div>
-    );
-};
 
-// Zip Game (Breathing) (unchanged)
-export const ZipGameWidget: React.FC = () => {
-    // ... existing ZipGameWidget code
-    const [phase, setPhase] = useState<'Inhale' | 'Hold' | 'Exhale'>('Inhale');
-    
-    useEffect(() => {
-        const inhale = setTimeout(() => setPhase('Hold'), 4000);
-        const hold = setTimeout(() => setPhase('Exhale'), 8000); // 4 + 4
-        const exhale = setTimeout(() => setPhase('Inhale'), 16000); // 4 + 4 + 8
-        
-        const loop = setInterval(() => {
-            setPhase('Inhale');
-            setTimeout(() => setPhase('Hold'), 4000);
-            setTimeout(() => setPhase('Exhale'), 8000);
-        }, 16000);
-        
-        return () => {
-            clearTimeout(inhale);
-            clearTimeout(hold);
-            clearTimeout(exhale);
-            clearInterval(loop);
-        };
-    }, []);
+            <div className="flex-grow flex flex-col p-2 min-h-0">
+                {/* Chat History with Inner Border */}
+                <div className="flex-grow overflow-y-auto space-y-2 p-2 custom-scrollbar border border-[var(--border-primary)] rounded-xl bg-[var(--bg-primary)]/50 shadow-inner" ref={scrollRef}>
+                    {data?.history?.map((m: any, i: number) => (
+                        <div key={i} className="flex flex-col gap-1 animate-[fadeIn_0.3s_ease-out]">
+                            <div className={`relative p-2 rounded-xl text-[10px] shadow-sm ${m.role === 'user' ? 'bg-[var(--accent)] text-white self-end rounded-br-none ml-4' : 'bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-primary)] self-start rounded-bl-none mr-4'}`}>
+                                {m.role === 'model' && (
+                                    <button 
+                                        onClick={() => handleCopy(m.text, i)}
+                                        className="absolute -top-2 -right-2 p-1 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-full hover:text-[var(--accent)] shadow-sm opacity-0 group-hover:opacity-100 transition-all"
+                                        title="Copy"
+                                    >
+                                        {copySuccess === i ? <CheckIcon className="w-2.5 h-2.5 text-green-500" /> : <ClipboardIcon className="w-2.5 h-2.5" />}
+                                    </button>
+                                )}
+                                <SimpleMarkdown content={m.text} />
+                                
+                                {/* Sources Section */}
+                                {m.sources && m.sources.length > 0 && (
+                                    <div className="mt-2 pt-2 border-t border-[var(--border-primary)]/50 flex flex-wrap gap-1">
+                                        <span className="text-[8px] font-bold text-[var(--text-secondary)] uppercase w-full">Sources</span>
+                                        {m.sources.map((source: any, idx: number) => (
+                                            <a 
+                                                key={idx} 
+                                                href={source.uri} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="flex items-center gap-1 px-1.5 py-0.5 bg-[var(--bg-secondary)] rounded-full border border-[var(--border-primary)] hover:border-[var(--accent)] transition-colors max-w-full"
+                                                title={source.title}
+                                            >
+                                                <GlobeIcon className="w-2.5 h-2.5 text-[var(--text-secondary)]" />
+                                                <span className="text-[8px] truncate max-w-[80px] text-[var(--text-primary)]">{source.title}</span>
+                                            </a>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {/* Follow-up Chips (Only for last message) */}
+                            {m.role === 'model' && i === (data.history.length - 1) && m.followUps && m.followUps.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-1 ml-1">
+                                    {m.followUps.map((q: string, idx: number) => (
+                                        <button 
+                                            key={idx} 
+                                            onClick={() => send(q)}
+                                            className="px-2 py-1 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-full text-[9px] text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors text-left"
+                                        >
+                                            {q}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ))}
 
-    return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/20">
-            <div className={`
-                rounded-full flex items-center justify-center text-xs font-bold text-white transition-all duration-[4000ms]
-                ${phase === 'Inhale' ? 'w-24 h-24 bg-blue-400 shadow-lg' : ''}
-                ${phase === 'Hold' ? 'w-24 h-24 bg-blue-500 shadow-xl scale-110' : ''}
-                ${phase === 'Exhale' ? 'w-12 h-12 bg-blue-300 shadow-sm duration-[8000ms]' : ''}
-            `}>
-                {phase}
-            </div>
-            <p className="mt-4 text-xs font-medium text-blue-500">4-7-8 Breathing</p>
-        </div>
-    );
-};
+                    {/* New 3-Dot Animation Loading Bubble */}
+                    {data?.loading && (
+                        <div className="flex flex-col gap-1 animate-[fadeIn_0.3s_ease-out]">
+                            <div className="bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-primary)] self-start rounded-xl rounded-bl-none mr-4 p-3 shadow-sm w-fit">
+                                <div className="flex gap-1 h-2 items-center">
+                                    <div className="w-1.5 h-1.5 bg-[var(--text-secondary)] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                    <div className="w-1.5 h-1.5 bg-[var(--text-secondary)] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                    <div className="w-1.5 h-1.5 bg-[var(--text-secondary)] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
-// TicTacToe (unchanged)
-export const TicTacToeWidget: React.FC = () => {
-    // ... existing TicTacToeWidget code
-    const [board, setBoard] = useState(Array(9).fill(null));
-    const [xIsNext, setXIsNext] = useState(true);
-    const winner = calculateWinner(board);
-
-    function handleClick(i: number) {
-        if (winner || board[i]) return;
-        const nextBoard = board.slice();
-        nextBoard[i] = xIsNext ? 'X' : 'O';
-        setBoard(nextBoard);
-        setXIsNext(!xIsNext);
-    }
-    
-    function calculateWinner(squares: any[]) {
-        const lines = [
-            [0, 1, 2], [3, 4, 5], [6, 7, 8],
-            [0, 3, 6], [1, 4, 7], [2, 5, 8],
-            [0, 4, 8], [2, 4, 6]
-        ];
-        for (let i = 0; i < lines.length; i++) {
-            const [a, b, c] = lines[i];
-            if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
-                return squares[a];
-            }
-        }
-        return null;
-    }
-
-    return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-2">
-            <div className="grid grid-cols-3 gap-1 w-full max-w-[150px] aspect-square">
-                {board.map((val, i) => (
+                {/* Input Area */}
+                <div className="mt-2 relative shrink-0">
+                    <input 
+                        value={msg} 
+                        onChange={e => setMsg(e.target.value)} 
+                        onKeyDown={e => e.key === 'Enter' && send(msg)}
+                        className="w-full pl-3 pr-10 py-2 text-[10px] bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg outline-none focus:border-[var(--accent)] transition-colors shadow-sm placeholder:text-[var(--text-secondary)]/50" 
+                        placeholder="Ask anything..."
+                    />
                     <button 
-                        key={i} 
-                        onClick={() => handleClick(i)}
-                        className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded flex items-center justify-center text-xl font-bold hover:bg-[var(--bg-secondary)]"
+                        onClick={() => send(msg)} 
+                        className="absolute right-1 top-1 bottom-1 px-2.5 bg-[var(--accent)] text-white rounded-md text-[10px] font-bold shadow-sm hover:opacity-90 active:scale-95 transition-all flex items-center justify-center disabled:opacity-50"
+                        disabled={!msg.trim() || data?.loading}
                     >
-                        <span className={val === 'X' ? 'text-[var(--accent)]' : 'text-[var(--success)]'}>{val}</span>
+                        <ChevronRightIcon className="w-3 h-3" />
                     </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const DictionaryWidget: React.FC<{ data?: any, onChange: any }> = ({ data, onChange }) => {
+    const search = async (w: string) => { onChange({...data, loading: true}); const res = await lookupDictionary(w); onChange({word: w, result: res, loading: false}); };
+    return (
+        <div className="p-2 h-full flex flex-col relative">
+            <input onKeyDown={e => e.key==='Enter' && search(e.currentTarget.value)} placeholder="Word..." className="p-1 text-xs bg-[var(--bg-primary)] rounded" />
+            <div className="mt-1 text-[10px]">{data?.result?.meanings?.[0]?.definitions?.[0]?.definition}</div>
+            {data?.loading && <WidgetLoadingOverlay label="Defining..." />}
+        </div>
+    );
+};
+
+export const NewsWidget: React.FC<{ isOnline?: boolean, data?: any, onChange?: (data: any) => void, isExpanded?: boolean }> = ({ isOnline = true, data, onChange, isExpanded }) => {
+    if (!isOnline) return <OfflinePlaceholder label="News Source" />;
+    const [news, setNews] = useState<NewsItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const loadNews = useCallback(async () => {
+        setLoading(true);
+        try { const data = await fetchNews(); setNews(data); if(onChange) onChange({ news: data }); } finally { setLoading(false); }
+    }, [onChange]);
+    
+    useEffect(() => { 
+        if(data?.news) { setNews(data.news); setLoading(false); }
+        else loadNews(); 
+    }, [loadNews, data]);
+
+    return (
+        <div className="flex flex-col h-full bg-[var(--bg-primary)] relative group/news">
+            <div className="flex items-center justify-between p-2 bg-[var(--danger)] text-white overflow-hidden shrink-0">
+                <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div>
+                    <span className="text-[9px] font-black uppercase tracking-tighter">Breaking News</span>
+                </div>
+                <button onClick={loadNews} className="p-0.5 hover:bg-white/20 rounded transition-colors"><ArrowPathIcon className="w-3 h-3" /></button>
+            </div>
+            <div className="flex-grow overflow-y-auto custom-scrollbar p-2 space-y-3">
+                {news.map((item, i) => (
+                    <a key={i} href={item.url} target="_blank" rel="noreferrer" className="block group animate-slide-fade rounded-lg overflow-hidden border border-[var(--border-primary)]/40 hover:border-[var(--accent)] hover:shadow-md transition-all bg-[var(--bg-secondary)]" style={{ animationDelay: `${i * 100}ms` }}>
+                        {item.imageUrl && (
+                            <div className="w-full h-20 overflow-hidden relative">
+                                <img src={item.imageUrl} alt="" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                                <span className="absolute bottom-1.5 left-1.5 bg-[var(--accent)] text-white text-[7px] font-bold px-1.5 py-0.5 rounded-sm uppercase">{item.source}</span>
+                            </div>
+                        )}
+                        <div className="p-2">
+                            {!item.imageUrl && (
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[7px] font-black text-[var(--accent)] uppercase tracking-widest">{item.source}</span>
+                                    <span className="text-[7px] text-[var(--text-secondary)]">Live</span>
+                                </div>
+                            )}
+                            <h5 className="text-[10px] font-bold leading-tight line-clamp-2 group-hover:text-[var(--accent)] transition-colors">{item.title}</h5>
+                            <p className="text-[8px] text-[var(--text-secondary)] mt-1 line-clamp-2 leading-relaxed">{item.summary}</p>
+                        </div>
+                    </a>
                 ))}
             </div>
-            <div className="mt-2 text-xs font-bold">
-                {winner ? (
-                    <span className="text-[var(--success)]">Winner: {winner}</span>
-                ) : board.every(Boolean) ? (
-                    <span className="text-[var(--text-secondary)]">Draw</span>
-                ) : (
-                    <span>Next: {xIsNext ? 'X' : 'O'}</span>
-                )}
-                {(winner || board.every(Boolean)) && (
-                    <button onClick={() => setBoard(Array(9).fill(null))} className="ml-2 text-[var(--accent)] hover:underline">Reset</button>
-                )}
-            </div>
+            {loading && <WidgetLoadingOverlay label="Fetching Headlines..." />}
         </div>
     );
 };
 
-// Snake Game (unchanged)
-export const SnakeGameWidget: React.FC = () => {
-    // ... existing SnakeGameWidget code
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [gameOver, setGameOver] = useState(false);
-    const [score, setScore] = useState(0);
+export const WikipediaWidget: React.FC<{ data?: any, isOnline?: boolean, onChange: any, onExpand?: () => void, isExpanded?: boolean }> = ({ data, isOnline = true, onChange, onExpand, isExpanded }) => {
+    if (!isOnline) return <OfflinePlaceholder label="Wiki Database" />;
+    return (
+        <div className="p-2 h-full overflow-y-auto relative group">
+            {onExpand && !isExpanded && (
+                <button onClick={onExpand} className="absolute top-2 right-2 p-1 bg-black/10 hover:bg-black/20 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    <ArrowsPointingOutIcon className="w-3 h-3 text-[var(--text-primary)]" />
+                </button>
+            )}
+            <h4 className="font-bold text-[10px] mb-1">{data?.wikiData?.title}</h4>
+            <p className="text-[9px]">{data?.wikiData?.extract}</p>
+            {data?.loading && <WidgetLoadingOverlay label="Reading..." />}
+        </div>
+    );
+};
 
-    // Game state refs to avoid closure staleness in loop
-    const snake = useRef([{x: 5, y: 5}]);
-    const food = useRef({x: 10, y: 10});
-    const dir = useRef({x: 1, y: 0});
-    const nextDir = useRef({x: 1, y: 0}); // Buffer for rapid key presses
-    
-    const gridSize = 15;
-    const tileCount = 15; // 225x225 canvas assumed roughly
+export const WeatherWidget: React.FC<{ data?: any, isOnline?: boolean, onChange: any }> = ({ data, isOnline = true, onChange }) => {
+    if (!isOnline) return <OfflinePlaceholder label="Weather Data" />;
+    return (
+        <div className="p-3 h-full flex flex-col justify-between bg-blue-400 text-white relative">
+            <div className="text-xs font-bold">{data?.location || 'Weather'}</div>
+            <div className="text-3xl font-bold">{data?.data?.temperature}°C</div>
+            <div className="text-[10px]">{data?.data?.condition}</div>
+            {data?.loading && <WidgetLoadingOverlay label="Forecasting..." />}
+        </div>
+    );
+};
+
+export const DownloadPdfWidget: React.FC<{ onDownload?: () => void }> = ({ onDownload }) => (
+    <div className="w-full h-full flex flex-col items-center justify-center p-4">
+        <button onClick={onDownload} className="flex flex-col items-center gap-2 p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--accent)] hover:shadow-lg transition-all group w-full h-full justify-center">
+            <div className="p-3 bg-[var(--accent)] text-white rounded-full group-hover:scale-110 transition-transform">
+                <ArrowDownTrayIcon className="w-6 h-6" />
+            </div>
+            <span className="text-xs font-bold uppercase tracking-wide text-[var(--text-primary)]">Save Notes PDF</span>
+        </button>
+    </div>
+);
+
+export const SpotifyWidget: React.FC<{ data: any, onChange: any, isOnline?: boolean }> = ({ data, onChange, isOnline = true }) => {
+    if (!isOnline) return <OfflinePlaceholder label="Spotify" />;
+    const [embed, setEmbed] = useState('');
+    const curatedPlaylists = [
+        { name: 'Lofi Girl', url: 'https://open.spotify.com/playlist/37i9dQZF1DWWQRUVU9vMvE', emoji: '☕', color: 'from-amber-400 to-orange-600' },
+        { name: 'Deep Focus', url: 'https://open.spotify.com/playlist/37i9dQZF1DWZeKzbIRjA1P', emoji: '🧘', color: 'from-blue-400 to-indigo-600' },
+        { name: 'Piano Flow', url: 'https://open.spotify.com/playlist/37i9dQZF1DX4sWSp4KmOR3', emoji: '🎹', color: 'from-emerald-400 to-teal-600' },
+        { name: 'Rainy Night', url: 'https://open.spotify.com/playlist/37i9dQZF1DX8Ueb99V2PAr', emoji: '🌧️', color: 'from-slate-400 to-slate-700' },
+        { name: 'Jazz Cafe', url: 'https://open.spotify.com/playlist/37i9dQZF1DWZqzZWvD4pS6', emoji: '🎷', color: 'from-rose-400 to-rose-700' },
+        { name: 'Nature', url: 'https://open.spotify.com/playlist/37i9dQZF1DX4pp3R6jnC9r', emoji: '🍃', color: 'from-lime-400 to-green-700' },
+    ];
 
     useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        const handleKey = (e: KeyboardEvent) => {
-            switch(e.key) {
-                case 'ArrowUp': if (dir.current.y === 0) nextDir.current = {x: 0, y: -1}; break;
-                case 'ArrowDown': if (dir.current.y === 0) nextDir.current = {x: 0, y: 1}; break;
-                case 'ArrowLeft': if (dir.current.x === 0) nextDir.current = {x: -1, y: 0}; break;
-                case 'ArrowRight': if (dir.current.x === 0) nextDir.current = {x: 1, y: 0}; break;
+        if(data?.url) {
+            let u = data.url.trim();
+            // Try robust parsing
+            try {
+                // If it's a full URL
+                if (u.includes('spotify.com')) {
+                    const urlObj = new URL(u);
+                    // Check if it's already an embed link
+                    if (!urlObj.pathname.startsWith('/embed')) {
+                        urlObj.pathname = `/embed${urlObj.pathname}`;
+                    }
+                    u = urlObj.toString();
+                } else if (u.startsWith('spotify:')) {
+                    // Handle URI format: spotify:user:spotify:playlist:37i9dQZF1DXcBWIGoYBM5M
+                    const parts = u.split(':');
+                    const type = parts[parts.length - 2];
+                    const id = parts[parts.length - 1];
+                    u = `https://open.spotify.com/embed/${type}/${id}`;
+                }
+            } catch (e) {
+                // Fallback for copied link parts (e.g. from mobile share) or simple cleanup
+                if(!u.includes('/embed/') && u.includes('spotify.com')) {
+                     const parts = u.split('.com/');
+                     if(parts.length > 1) {
+                         // Remove any potential query params first if doing simple split
+                         const path = parts[1].split('?')[0]; 
+                         u = `https://open.spotify.com/embed/${path}`;
+                         // Re-append query params if they existed (like ?si=) as they might be needed? 
+                         // Usually not for embed, but let's keep it simple.
+                     }
+                }
             }
-        };
-        window.addEventListener('keydown', handleKey);
+            setEmbed(u);
+        } else setEmbed('');
+    }, [data?.url]);
 
-        const loop = setInterval(() => {
-            if (gameOver) return;
-
-            dir.current = nextDir.current;
-            const head = { x: snake.current[0].x + dir.current.x, y: snake.current[0].y + dir.current.y };
-
-            // Wall collision
-            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
-                setGameOver(true);
-                return;
-            }
-            // Self collision
-            if (snake.current.some(s => s.x === head.x && s.y === head.y)) {
-                setGameOver(true);
-                return;
-            }
-
-            snake.current.unshift(head);
-
-            if (head.x === food.current.x && head.y === food.current.y) {
-                setScore(s => s + 1);
-                food.current = {
-                    x: Math.floor(Math.random() * tileCount),
-                    y: Math.floor(Math.random() * tileCount)
-                };
-            } else {
-                snake.current.pop();
-            }
-
-            // Draw
-            ctx.fillStyle = '#222';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.fillStyle = '#4ade80'; // Green snake
-            snake.current.forEach(s => ctx.fillRect(s.x * gridSize, s.y * gridSize, gridSize - 2, gridSize - 2));
-
-            ctx.fillStyle = '#ef4444'; // Red food
-            ctx.fillRect(food.current.x * gridSize, food.current.y * gridSize, gridSize - 2, gridSize - 2);
-
-        }, 150);
-
-        return () => {
-            clearInterval(loop);
-            window.removeEventListener('keydown', handleKey);
-        };
-    }, [gameOver]);
-
-    const reset = () => {
-        snake.current = [{x: 5, y: 5}];
-        dir.current = {x: 1, y: 0};
-        nextDir.current = {x: 1, y: 0};
-        setScore(0);
-        setGameOver(false);
-    };
+    if (!embed) {
+        return (
+            <div className="w-full h-full bg-black flex flex-col p-3 overflow-y-auto custom-scrollbar relative">
+                <div className="flex items-center gap-2 mb-3 shrink-0">
+                    <SpotifyIcon className="w-4 h-4 text-[#1DB954]" />
+                    <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Atmospheres</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 flex-grow min-h-0 content-start">
+                    {curatedPlaylists.map(pl => (
+                        <button key={pl.name} onClick={() => onChange({ url: pl.url })} className={`relative aspect-square rounded-xl bg-gradient-to-br ${pl.color} p-2 flex flex-col items-center justify-center gap-1 shadow-lg hover:scale-105 active:scale-95 transition-all group overflow-hidden border border-white/10`}>
+                            <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
+                            <span className="text-xl relative z-10 drop-shadow-md">{pl.emoji}</span>
+                            <span className="text-[9px] font-black text-white relative z-10 text-center leading-tight tracking-tight uppercase px-1">{pl.name}</span>
+                        </button>
+                    ))}
+                </div>
+                <div className="mt-4 pt-3 border-t border-zinc-800 shrink-0">
+                    <input onChange={e => onChange({url: e.target.value})} placeholder="Paste link..." className="w-full p-2 text-[9px] font-bold rounded-lg bg-zinc-900 text-zinc-100 border border-zinc-800 focus:border-[#1DB954] outline-none placeholder:text-zinc-600 uppercase tracking-widest" />
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-black p-2 rounded relative">
-             <div className="flex justify-between w-full text-xs text-white mb-1 px-1">
-                 <span>Snake</span>
-                 <span>Score: {score}</span>
-             </div>
-             <canvas ref={canvasRef} width={225} height={225} className="bg-[#222] border border-gray-700 w-full aspect-square" />
-             {gameOver && (
-                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
-                     <p className="text-red-500 font-bold mb-2">Game Over</p>
-                     <button onClick={reset} className="px-3 py-1 bg-white text-black text-xs font-bold rounded hover:bg-gray-200">Restart</button>
-                 </div>
-             )}
+        <div className="w-full h-full bg-black flex flex-col relative group">
+            <button onClick={() => onChange({ url: '' })} className="absolute top-2 right-2 z-20 p-1.5 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 shadow-xl border border-white/10" title="Change Audio"><ArrowPathIcon className="w-3.5 h-3.5" /></button>
+            <iframe 
+                src={embed} 
+                width="100%" 
+                height="100%" 
+                frameBorder="0" 
+                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+                loading="lazy"
+                className="rounded-xl shadow-2xl" 
+            />
         </div>
     );
 };
+
+export const SnakeGameWidget: React.FC = () => <div className="flex items-center justify-center h-full text-[10px]">Snake Game</div>;
+export const TicTacToeWidget: React.FC = () => <div className="flex items-center justify-center h-full text-[10px]">Tic-Tac-Toe</div>;
+export const Game2048Widget: React.FC = () => <div className="flex items-center justify-center h-full text-[10px]">2048 Game</div>;

@@ -1,11 +1,12 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
     BoldIcon, ItalicIcon, UnderlineIcon, StrikethroughIcon,
     ListBulletIcon, ListNumberIcon, QuoteIcon, CodeBracketIcon,
     AlignLeftIcon, AlignCenterIcon, AlignRightIcon, AlignJustifyIcon,
     UndoIcon, RedoIcon, IndentDecreaseIcon, IndentIncreaseIcon,
-    SubscriptIcon, SuperscriptIcon, EraserIcon, LinkIcon
+    SubscriptIcon, SuperscriptIcon, EraserIcon, LinkIcon, ChevronDownIcon, CheckIcon
 } from './Icons';
 
 interface ToolbarButtonProps {
@@ -18,7 +19,7 @@ interface ToolbarButtonProps {
 
 const ToolbarButton: React.FC<ToolbarButtonProps> = ({ command, children, title, active, arg }) => {
     const handleMouseDown = (e: React.MouseEvent) => {
-        e.preventDefault();
+        e.preventDefault(); // Prevent losing focus from editor
         if (command === 'createLink') {
             const url = prompt('Enter link URL:', 'https://');
             if (url) {
@@ -43,6 +44,11 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({ command, children, title,
 const EditorToolbar = () => {
     const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
     const [blockType, setBlockType] = useState('p');
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const savedRange = useRef<Range | null>(null);
+    const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
 
     const updateToolbarState = useCallback(() => {
         const newActiveFormats = new Set<string>();
@@ -54,9 +60,11 @@ const EditorToolbar = () => {
         ];
         
         commands.forEach(cmd => {
-            if (document.queryCommandState(cmd)) {
-                newActiveFormats.add(cmd);
-            }
+            try {
+                if (document.queryCommandState(cmd)) {
+                    newActiveFormats.add(cmd);
+                }
+            } catch (e) {}
         });
 
         let parentNode = window.getSelection()?.focusNode?.parentNode;
@@ -71,7 +79,6 @@ const EditorToolbar = () => {
             parentNode = parentNode.parentNode;
         }
         setBlockType(currentBlockType);
-        
         setActiveFormats(newActiveFormats);
     }, []);
 
@@ -86,20 +93,103 @@ const EditorToolbar = () => {
             document.removeEventListener('focusin', handleSelectionChange);
         };
     }, [updateToolbarState]);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) && 
+                triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const saveSelection = () => {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+            savedRange.current = sel.getRangeAt(0).cloneRange();
+        }
+    };
+
+    const restoreSelection = () => {
+        const sel = window.getSelection();
+        if (sel && savedRange.current) {
+            sel.removeAllRanges();
+            sel.addRange(savedRange.current);
+        }
+    };
     
-    const handleFormatBlock = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const tag = e.target.value;
+    const toggleDropdown = (e: React.MouseEvent) => {
+        e.preventDefault();
+        saveSelection();
+        if (!isDropdownOpen && triggerRef.current) {
+            const rect = triggerRef.current.getBoundingClientRect();
+            setDropdownPos({ top: rect.bottom + 8, left: rect.left });
+        }
+        setIsDropdownOpen(!isDropdownOpen);
+    };
+
+    const handleFormatBlock = (tag: string) => {
+        restoreSelection(); // CRITICAL: Restore selection before applying command
         document.execCommand('formatBlock', false, `<${tag}>`);
+        setBlockType(tag);
+        setIsDropdownOpen(false);
+        // Ensure editor regains focus immediately
+        const editor = document.querySelector('.notebook-textarea') as HTMLElement;
+        if (editor) editor.focus();
+    };
+
+    const blockTypeLabels: Record<string, string> = {
+        'p': 'Paragraph',
+        'h1': 'Heading 1',
+        'h2': 'Heading 2',
+        'h3': 'Heading 3',
+        'blockquote': 'Quote',
+        'pre': 'Code'
     };
 
     return (
-        <div className="editor-toolbar flex-shrink-0">
-            <select value={blockType} onChange={handleFormatBlock} className="editor-toolbar-select" title="Text Style">
-                <option value="p">Paragraph</option>
-                <option value="h1">Heading 1</option>
-                <option value="h2">Heading 2</option>
-                <option value="h3">Heading 3</option>
-            </select>
+        <div className="editor-toolbar flex-shrink-0 relative">
+            {/* Custom Themed Dropdown with Portal to avoid Clipping */}
+            <div className="relative">
+                <button 
+                    ref={triggerRef}
+                    onMouseDown={toggleDropdown}
+                    className={`flex items-center gap-2 px-3 py-1 text-xs font-bold transition-all rounded-md active:scale-95 border border-transparent
+                        ${isDropdownOpen ? 'bg-[var(--bg-secondary)] border-[var(--border-primary)] text-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'}
+                    `}
+                >
+                    <span className="min-w-[70px] text-left">{blockTypeLabels[blockType] || 'Text Style'}</span>
+                    <ChevronDownIcon className={`w-3 h-3 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isDropdownOpen && createPortal(
+                    <div 
+                        ref={dropdownRef}
+                        className="fixed bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl shadow-2xl z-[9999] overflow-hidden animated-popover py-1.5 backdrop-blur-md w-52"
+                        style={{ top: dropdownPos.top, left: dropdownPos.left }}
+                    >
+                        {Object.entries(blockTypeLabels).map(([tag, label]) => (
+                            <button
+                                key={tag}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => handleFormatBlock(tag)}
+                                className={`flex items-center justify-between w-full px-4 py-2.5 text-xs font-semibold text-left transition-all
+                                    ${blockType === tag 
+                                        ? 'bg-[var(--accent)] text-white' 
+                                        : 'text-[var(--text-primary)] hover:bg-[var(--bg-primary)] hover:pl-5'}
+                                `}
+                            >
+                                <span className={tag === 'p' ? '' : (tag === 'h1' ? 'text-lg font-black' : (tag === 'h2' ? 'text-base font-bold' : (tag === 'h3' ? 'text-sm font-bold' : '')))}>{label}</span>
+                                {blockType === tag && <CheckIcon className="w-3.5 h-3.5" />}
+                            </button>
+                        ))}
+                    </div>,
+                    document.body
+                )}
+            </div>
+
             <div className="editor-toolbar-separator" />
             
             <ToolbarButton command="undo" title="Undo (Ctrl+Z)" active={false}><UndoIcon className="w-4 h-4" /></ToolbarButton>

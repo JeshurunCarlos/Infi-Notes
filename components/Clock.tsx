@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { MagnifyingGlassIcon } from './Icons';
 
 const timezones = {
     'UTC': 'UTC',
@@ -30,9 +29,7 @@ interface ClockProps {
 const Clock: React.FC<ClockProps> = ({ timezone, isThemeChanging, onChange }) => {
     const [time, setTime] = useState(new Date());
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
     const dropdownRef = useRef<HTMLDivElement>(null);
-    const searchInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const timerId = setInterval(() => setTime(new Date()), 1000);
@@ -43,7 +40,6 @@ const Clock: React.FC<ClockProps> = ({ timezone, isThemeChanging, onChange }) =>
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setIsDropdownOpen(false);
-                setSearchQuery('');
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -51,13 +47,6 @@ const Clock: React.FC<ClockProps> = ({ timezone, isThemeChanging, onChange }) =>
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, []);
-
-    useEffect(() => {
-        if (isDropdownOpen && searchInputRef.current) {
-            // Small timeout to allow transition to start
-            setTimeout(() => searchInputRef.current?.focus(), 100);
-        }
-    }, [isDropdownOpen]);
 
     const formattedTime = useMemo(() => {
         return time.toLocaleTimeString('en-US', {
@@ -70,13 +59,6 @@ const Clock: React.FC<ClockProps> = ({ timezone, isThemeChanging, onChange }) =>
 
     const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-    const filteredTimezones = useMemo(() => {
-        const query = searchQuery.toLowerCase();
-        return Object.entries(timezones).filter(([tz, label]) => 
-            label.toLowerCase().includes(query) || tz.toLowerCase().includes(query)
-        );
-    }, [searchQuery]);
-
     return (
         <div ref={dropdownRef} className="relative">
             <button
@@ -86,63 +68,41 @@ const Clock: React.FC<ClockProps> = ({ timezone, isThemeChanging, onChange }) =>
                 <span className="font-mono text-lg font-bold tracking-wider text-[var(--clock-text)] min-w-[80px]">{formattedTime}</span>
             </button>
             
-            {/* Seamless Animated Dropdown */}
+            {/* Seamless Animated Horizontal Dropdown (RTC Menu) */}
             <div 
-                className={`absolute top-full mt-3 left-1/2 -translate-x-1/2 w-72 bg-[var(--bg-secondary)] rounded-xl shadow-2xl border border-[var(--border-primary)] z-50 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top flex flex-col
+                className={`absolute top-full mt-3 left-1/2 -translate-x-1/2 w-max max-w-[90vw] bg-[var(--bg-secondary)] rounded-xl shadow-2xl border border-[var(--border-primary)] z-50 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top
                     ${isDropdownOpen 
                         ? 'opacity-100 transform scale-100 translate-y-0 pointer-events-auto' 
                         : 'opacity-0 transform scale-95 -translate-y-2 pointer-events-none'
                     }
                 `}
             >
-                <ul className="max-h-64 overflow-y-auto custom-scrollbar flex-grow">
-                    <li 
-                        onClick={() => { onChange(localTimezone); setIsDropdownOpen(false); }} 
-                        className={`px-4 py-3 text-sm cursor-pointer flex justify-between items-center transition-colors border-b border-[var(--border-primary)]/50 ${timezone === localTimezone ? 'bg-[var(--accent)] text-white' : 'hover:bg-[var(--bg-primary)] text-[var(--text-primary)]'}`}
-                    >
-                        <div className="flex flex-col">
-                            <span className="font-bold">Local Time</span>
-                            <span className={`text-[10px] ${timezone === localTimezone ? 'text-white/80' : 'text-[var(--text-secondary)]'}`}>{localTimezone.split('/').pop()?.replace(/_/g, ' ')}</span>
-                        </div>
-                        {timezone === localTimezone && <span className="h-2 w-2 rounded-full bg-white"></span>}
-                    </li>
-                    
-                    {filteredTimezones.map(([tz, label]) => {
-                        const isActive = timezone === tz;
-                        return (
-                            <li 
-                                key={tz} 
-                                onClick={() => { onChange(tz); setIsDropdownOpen(false); }} 
-                                className={`px-4 py-2.5 text-sm cursor-pointer flex justify-between items-center transition-colors ${isActive ? 'bg-[var(--accent)] text-white' : 'hover:bg-[var(--bg-primary)] text-[var(--text-primary)]'}`}
-                            >
-                                <div className="flex flex-col">
-                                    <span className="font-medium">{label}</span>
-                                    <span className={`text-[10px] ${isActive ? 'text-white/80' : 'text-[var(--text-secondary)]'}`}>{tz}</span>
-                                </div>
-                                {isActive && <span className="h-2 w-2 rounded-full bg-white"></span>}
-                            </li>
-                        );
-                    })}
-                    
-                    {filteredTimezones.length === 0 && (
-                        <li className="px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
-                            No timezones found
+                <div className="p-2 overflow-x-auto custom-scrollbar">
+                    <ul className="flex flex-row gap-2">
+                        <li 
+                            onClick={() => { onChange(localTimezone); setIsDropdownOpen(false); }} 
+                            className={`flex-shrink-0 px-4 py-3 cursor-pointer flex flex-col items-center justify-center gap-1 transition-all rounded-lg border border-[var(--border-primary)]/50 ${timezone === localTimezone ? 'bg-[var(--accent)] text-white shadow-md' : 'hover:bg-[var(--bg-primary)] text-[var(--text-primary)]'}`}
+                            style={{ minWidth: '100px' }}
+                        >
+                            <span className="font-bold text-xs whitespace-nowrap">Local Time</span>
+                            <span className={`text-[10px] ${timezone === localTimezone ? 'text-white/80' : 'text-[var(--text-secondary)]'} whitespace-nowrap`}>{localTimezone.split('/').pop()?.replace(/_/g, ' ')}</span>
                         </li>
-                    )}
-                </ul>
-
-                <div className="p-3 border-t border-[var(--border-primary)] bg-[var(--bg-primary)]">
-                    <div className="relative">
-                        <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
-                        <input 
-                            ref={searchInputRef}
-                            type="text" 
-                            placeholder="Search city..." 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-8 pr-2 py-1.5 text-sm bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-md focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all"
-                        />
-                    </div>
+                        
+                        {Object.entries(timezones).map(([tz, label]) => {
+                            const isActive = timezone === tz;
+                            return (
+                                <li 
+                                    key={tz} 
+                                    onClick={() => { onChange(tz); setIsDropdownOpen(false); }} 
+                                    className={`flex-shrink-0 px-4 py-3 cursor-pointer flex flex-col items-center justify-center gap-1 transition-all rounded-lg border border-[var(--border-primary)]/50 ${isActive ? 'bg-[var(--accent)] text-white shadow-md' : 'hover:bg-[var(--bg-primary)] text-[var(--text-primary)]'}`}
+                                    style={{ minWidth: '100px' }}
+                                >
+                                    <span className="font-medium text-xs whitespace-nowrap">{label}</span>
+                                    <span className={`text-[10px] ${isActive ? 'text-white/80' : 'text-[var(--text-secondary)]'} whitespace-nowrap`}>{tz}</span>
+                                </li>
+                            );
+                        })}
+                    </ul>
                 </div>
             </div>
         </div>

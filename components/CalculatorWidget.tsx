@@ -291,7 +291,7 @@ export const CalculatorWidget: React.FC<{
              {onExpand && (
                 <button 
                     onClick={onExpand}
-                    className="absolute top-2 left-2 p-1 rounded-full bg-black/10 hover:bg-black/20 text-[var(--calc-display-text)] z-20 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-2 right-2 p-1.5 rounded-full hover:bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors z-20"
                     title="Expand to Scientific Calculator"
                 >
                     <ArrowsPointingOutIcon className="w-4 h-4" />
@@ -299,8 +299,8 @@ export const CalculatorWidget: React.FC<{
              )}
              
              <div className="flex-shrink-0 flex flex-col justify-end p-2 text-right relative z-10">
-                <div className="text-xs text-[var(--calc-history-text)] h-4 truncate text-right mb-0.5">{history}</div>
-                <div className="text-3xl font-light truncate">{display}</div>
+                <div className="text-xs text-[var(--calc-history-text)] h-4 truncate text-right mb-0.5 mr-6">{history}</div>
+                <div className="text-3xl font-light truncate mr-6">{display}</div>
             </div>
             <div className="flex-grow grid gap-0.5 p-0.5 grid-cols-4">
                 {basicButtons.map((btn, idx) => (

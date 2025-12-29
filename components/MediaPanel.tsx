@@ -1,9 +1,19 @@
-
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { PlusIcon, CloseIcon, DocumentTextIcon, FilmIcon, ArrowsPointingOutIcon, UploadIcon, ArrowsPointingInIcon } from './Icons';
+import { 
+    PlusIcon, CloseIcon, FilmIcon, UploadIcon, MinimizeIcon, QueueListIcon, TrashIcon, NewspaperIcon, 
+    LinkIcon, ImageIcon, NoSymbolIcon, PlayIcon, DocumentTextIcon, TimerIcon, CalculatorIcon, 
+    ClipboardIcon, MusicalNoteIcon, PauseIcon, BackwardIcon, ForwardIcon, SpotifyIcon, 
+    MinusIcon, TerminalIcon, ArrowsPointingInIcon, EyeIcon, EyeSlashIcon, GoogleIcon, 
+    ChevronLeftIcon, ChevronRightIcon, MagnifyingGlassIcon, SpeakerWaveIcon, 
+    SpeakerXMarkIcon, FolderIcon, SparklesIcon, ArrowPathIcon, LanguageIcon, 
+    ClipboardDocumentCheckIcon, ArrowsPointingOutIcon, BoltIcon, ChatBubbleLeftRightIcon, 
+    CubeIcon, ListBulletIcon, Squares2X2Icon, ArrowDownTrayIcon, GlobeIcon, 
+    BookOpenIcon, CloudIcon, SignalSlashIcon, CheckIcon 
+} from './Icons';
 import { WidgetState, WidgetType } from '../types';
-import { PomodoroWidget, ImageWidget, HyperlinkWidget, CalculatorWidget, StickyNoteWidget, MusicPlayerWidget, WidgetWrapper, WidgetSelectionView, SpotifyWidget, ToDoListWidget, TerminalWidget, GoogleSearchWidget, DictionaryWidget, ZipGameWidget, TicTacToeWidget, SnakeGameWidget, ChatGPTWidget, Game2048Widget, NewsWidget } from './Widgets';
+import { PomodoroWidget, ImageWidget, HyperlinkWidget, CalculatorWidget, StickyNoteWidget, MusicPlayerWidget, WidgetWrapper, WidgetSelectionView, SpotifyWidget, ToDoListWidget, TerminalWidget, GoogleSearchWidget, DictionaryWidget, TicTacToeWidget, SnakeGameWidget, ChatGPTWidget, Game2048Widget, NewsWidget, WikipediaWidget, WeatherWidget, DownloadPdfWidget } from './Widgets';
 import { performGoogleSearch } from '../lib/ai';
+import Spinner from './Spinner';
 
 interface MediaPanelProps {
     videoUrl: string;
@@ -20,7 +30,29 @@ interface MediaPanelProps {
     onToggleWidgetBg: (index: number) => void;
     onTerminalCommand: (index: number, command: string, args: string[]) => void;
     onMoveWidget: (fromIndex: number, toIndex: number) => void;
+    videoVisible: boolean;
+    widgetsVisible: boolean;
+    onContextMenu: (e: React.MouseEvent, type: 'video-section' | 'widget-section' | 'specific-widget', index?: number) => void;
+    onUpdateWidgetPosition?: (index: number, position: { x: number, y: number }) => void;
+    onDownloadNotes?: () => void;
+    isOnline?: boolean;
+    animStage?: number; 
+    onWidgetHoverStateChange?: (isHovering: boolean) => void;
+    layoutMode?: 'modern' | 'classic';
 }
+
+const getStandardizedYoutubeUrl = (input: string): string | null => {
+    if (!input) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)|shorts\//;
+    const match = input.match(regExp);
+    let id = '';
+    if (match) {
+        id = input.split(match[0])[1].split(/[?&]/)[0];
+    } else if (input.length === 11) {
+        id = input;
+    }
+    return id ? `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&modestbranding=1` : null;
+};
 
 const MediaPanel: React.FC<MediaPanelProps> = ({ 
     videoUrl, 
@@ -37,59 +69,41 @@ const MediaPanel: React.FC<MediaPanelProps> = ({
     onToggleWidgetBg,
     onTerminalCommand,
     onMoveWidget,
+    videoVisible,
+    widgetsVisible,
+    onContextMenu,
+    onUpdateWidgetPosition,
+    onDownloadNotes,
+    isOnline = true,
+    animStage = 5,
+    onWidgetHoverStateChange,
+    layoutMode = 'modern'
 }) => {
   const [mediaType, setMediaType] = useState<'selection' | 'document' | 'video'>('selection');
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [dropHint, setDropHint] = useState('Drop Here');
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
-  
-  // New state for drag and drop sorting
-  const [draggingWidgetIndex, setDraggingWidgetIndex] = useState<number | null>(null);
-
-  // Unified expansion state
+  const [iframeLoading, setIframeLoading] = useState(false);
+  const [inputType, setInputType] = useState<'video' | 'pdf'>('video');
   const [expandedWidget, setExpandedWidget] = useState<{ index: number, type: WidgetType } | null>(null);
-  
-  // Handle Global Alt+E to close expansions or selections
-  useEffect(() => {
-      const handleGlobalKeyDown = (e: KeyboardEvent) => {
-          if (e.altKey && e.key.toLowerCase() === 'e') {
-              e.preventDefault();
-              if (expandedWidget) {
-                  setExpandedWidget(null);
-              }
-              // If a widget is in selecting mode (WidgetSelectionView is visible), close it by removing/emptying
-              // We scan widgets to find any that are 'selecting'
-              widgets.forEach((w, index) => {
-                  if (w.type === 'selecting') {
-                      onRemoveWidget(index);
-                  }
-              });
-          }
-      };
-      window.addEventListener('keydown', handleGlobalKeyDown);
-      return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [expandedWidget, widgets, onRemoveWidget]);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const standardizedEmbedUrl = videoId ? getStandardizedYoutubeUrl(videoId) : null;
+
+  useEffect(() => { if (videoId) setIframeLoading(true); }, [videoId]);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       if (file.type === 'application/pdf') {
         const url = URL.createObjectURL(file);
-        if (documentUrl) {
-          URL.revokeObjectURL(documentUrl);
-        }
+        if (documentUrl) URL.revokeObjectURL(documentUrl);
         setDocumentUrl(url);
         setMediaType('document');
-      } else {
-        alert('Please upload a valid PDF file.');
-      }
+      } else alert('Please upload a valid PDF file.');
     }
   }, [documentUrl]);
 
-  const handleBackToSelection = useCallback((e: React.MouseEvent) => {
+  const handleBackToSelection = useCallback(() => {
     if (mediaType === 'document' && documentUrl) {
       URL.revokeObjectURL(documentUrl);
       setDocumentUrl(null);
@@ -97,495 +111,210 @@ const MediaPanel: React.FC<MediaPanelProps> = ({
     setMediaType('selection');
   }, [mediaType, documentUrl]);
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
-      e.preventDefault();
-      
-      // If dragging a widget, just update drop target style
-      if (draggingWidgetIndex !== null) {
-          setDragOverIndex(index);
-          e.dataTransfer.dropEffect = 'move';
-          return;
-      }
-
-      // External file/url handling
-      if (dragOverIndex !== index) {
-          setDragOverIndex(index);
-          const types = e.dataTransfer.types;
-          if (types.includes('Files')) {
-              setDropHint('Drop Image or Audio File');
-          } else if (types.includes('text/uri-list') || types.includes('text/plain')) {
-              setDropHint('Drop Link or Text');
-          } else {
-              setDropHint('Drop Here');
-          }
-      }
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setDragOverIndex(null);
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, index: number) => {
-      e.preventDefault();
-      setDragOverIndex(null);
-
-      // Handle Widget Reordering
-      const widgetIndexStr = e.dataTransfer.getData('widgetIndex');
-      if (widgetIndexStr) {
-          const fromIndex = parseInt(widgetIndexStr, 10);
-          if (!isNaN(fromIndex) && fromIndex !== index) {
-              onMoveWidget(fromIndex, index);
-          }
-          setDraggingWidgetIndex(null);
-          return;
-      }
-
-      // 1. Check for files (images or audio)
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-          const file = e.dataTransfer.files[0];
-          if (file.type.startsWith('image/')) {
-              const reader = new FileReader();
-              reader.onload = (loadEvent) => {
-                  if (loadEvent.target && typeof loadEvent.target.result === 'string') {
-                      onSelectWidget(index, 'image');
-                      updateWidgetData(index, { url: loadEvent.target.result });
-                  }
-              };
-              reader.readAsDataURL(file);
-              return;
-          }
-          if (file.type.startsWith('audio/')) {
-            // If the widget is already a music player, we want to append to the queue, handled by the widget logic itself if dropped on the widget.
-            // But here we are dropping on the container.
-            // If it's empty, initialize new. If it's already music, append.
-            
-            const currentWidget = widgets[index];
-            const url = URL.createObjectURL(file);
-            const newSong = {
-                id: Date.now().toString(),
-                url: url,
-                title: file.name.replace(/\.[^/.]+$/, ""),
-                artist: 'Loading metadata...',
-                isLocal: true,
-                albumArt: null,
-            };
-
-            if (currentWidget.type === 'music') {
-                // Append to existing queue
-                const existingData = currentWidget.data || {};
-                const currentQueue = existingData.queue || [];
-                const newQueue = [...currentQueue, newSong];
-                
-                updateWidgetData(index, {
-                    ...existingData,
-                    queue: newQueue
-                });
-
-                 // Trigger metadata read
-                 if (window.jsmediatags) {
-                    window.jsmediatags.read(file, {
-                        onSuccess: (tag: any) => {
-                            const { title, artist, picture } = tag.tags;
-                            let imageUrl = null;
-                            if (picture) {
-                               let base64String = "";
-                                for (let i = 0; i < picture.data.length; i++) {
-                                    base64String += String.fromCharCode(picture.data[i]);
-                                }
-                                imageUrl = `data:${picture.format};base64,${window.btoa(base64String)}`;
-                            }
-                            // Update the song in the queue
-                            const updatedQueue = newQueue.map(s => s.id === newSong.id ? { ...s, title: title || s.title, artist: artist || 'Unknown Artist', albumArt: imageUrl } : s);
-                            updateWidgetData(index, { ...existingData, queue: updatedQueue });
-                        },
-                        onError: () => { /* ignore */ }
-                    });
-                }
-
-            } else {
-                // Initialize new music widget
-                const initialData = {
-                    queue: [newSong],
-                    currentSongIndex: 0,
-                    volume: 1,
-                    playlists: [],
-                    isPlaying: false
-                };
-                onSelectWidget(index, 'music');
-                updateWidgetData(index, initialData);
-
-                if (window.jsmediatags) {
-                    window.jsmediatags.read(file, {
-                        onSuccess: (tag: any) => {
-                            const { title, artist, picture } = tag.tags;
-                            let imageUrl = null;
-                            if (picture) {
-                               let base64String = "";
-                                for (let i = 0; i < picture.data.length; i++) {
-                                    base64String += String.fromCharCode(picture.data[i]);
-                                }
-                                imageUrl = `data:${picture.format};base64,${window.btoa(base64String)}`;
-                            }
-                            const updatedSong = { ...newSong, title: title || newSong.title, artist: artist || 'Unknown Artist', albumArt: imageUrl };
-                            updateWidgetData(index, { ...initialData, queue: [updatedSong] });
-                        },
-                        onError: (error: any) => {
-                            console.error('Error reading audio tags:', error);
-                            const updatedSong = { ...newSong, artist: 'Unknown Artist' };
-                            updateWidgetData(index, { ...initialData, queue: [updatedSong] });
-                        },
-                    });
-                } else {
-                    console.warn('jsmediatags library not found.');
-                     const updatedSong = { ...newSong, artist: 'Unknown Artist' };
-                     updateWidgetData(index, { ...initialData, queue: [updatedSong] });
-                }
-            }
-            return;
-        }
-      }
-
-      // 2. Check for URLs
-      try {
-          const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
-          if (url) {
-              const urlObj = new URL(url); // Simple URL validation, will throw if invalid
-              if (urlObj.hostname === 'open.spotify.com') {
-                  onSelectWidget(index, 'spotify');
-                  updateWidgetData(index, { url });
-                  return;
-              }
-              onSelectWidget(index, 'hyperlink');
-              updateWidgetData(index, { url: url, text: url });
-              return;
-          }
-      } catch (error) {
-          // Not a valid URL, will fall through to be treated as plain text
-      }
-
-      // 3. Fallback for plain text to create a sticky note
-      const text = e.dataTransfer.getData('text/plain');
-      if (text) {
-          onSelectWidget(index, 'stickynote');
-          updateWidgetData(index, { notes: [text] });
-      }
-  };
-  
-  const handleWidgetContainerClick = (index: number) => {
-    if (activeWidgetIndex === index) {
-      onToggleWidgetBg(index);
-    } else {
-      onSetActiveWidget(index);
-    }
-  };
-
   const handleSearch = async (index: number, query: string) => {
+      if (!isOnline) return;
       updateWidgetData(index, { ...widgets[index].data, loading: true, error: null });
       try {
         const result = await performGoogleSearch(query);
         updateWidgetData(index, { query, ...result, loading: false });
       } catch (e) {
-        const error = e instanceof Error ? e.message : 'An unknown error occurred.';
-        updateWidgetData(index, { ...widgets[index].data, loading: false, error });
+        updateWidgetData(index, { ...widgets[index].data, loading: false, error: 'Search failed' });
       }
   };
-  
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-      e.dataTransfer.setData('widgetIndex', index.toString());
-      setDraggingWidgetIndex(index);
+
+  const handleWidgetMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (draggingIndex !== null) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const width = rect.width;
+    const height = rect.height;
+    const xPct = (x / width - 0.5) * 20; 
+    const yPct = (y / height - 0.5) * -20; 
+    e.currentTarget.style.transform = `perspective(1000px) rotateX(${yPct}deg) rotateY(${xPct}deg) scale(1.1)`;
+    e.currentTarget.style.zIndex = '50';
+    if (onWidgetHoverStateChange) onWidgetHoverStateChange(true);
   };
 
+  const handleWidgetMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1)`;
+    e.currentTarget.style.zIndex = 'auto';
+    if (onWidgetHoverStateChange) onWidgetHoverStateChange(false);
+  };
 
-  const renderWidget = (widget: WidgetState, index: number) => {
+  const handleDragStart = (e: React.DragEvent, index: number, widget: WidgetState) => {
+    if (widget.type === 'selecting') { e.preventDefault(); return; }
+    const target = e.currentTarget as HTMLDivElement;
+    target.style.transform = 'none';
+    setDraggingIndex(index);
+    const data = { type: widget.type, data: widget.data || {}, originalIndex: index };
+    const jsonString = JSON.stringify(data);
+    e.dataTransfer.setData('application/json', jsonString);
+    e.dataTransfer.setData('text/plain', jsonString);
+    e.dataTransfer.setData('media_panel_index', index.toString());
+    e.dataTransfer.effectAllowed = 'copyMove';
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (draggingIndex === null || draggingIndex === index) return;
+      setDragOverIndex(index);
+  };
+
+  const handleDrop = (e: React.DragEvent, toIndex: number) => {
+      e.preventDefault(); e.stopPropagation();
+      const fromIndexStr = e.dataTransfer.getData('media_panel_index');
+      if (fromIndexStr) {
+          const fromIndex = parseInt(fromIndexStr, 10);
+          if (!isNaN(fromIndex) && fromIndex !== toIndex) onMoveWidget(fromIndex, toIndex);
+      }
+      setDraggingIndex(null); setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => { setDraggingIndex(null); setDragOverIndex(null); };
+
+  const renderWidgetContent = (widget: WidgetState, index: number) => {
     switch (widget.type) {
-      case 'pomodoro':
-        return <WidgetWrapper title="Pomodoro" noPadding={true}><PomodoroWidget /></WidgetWrapper>;
-      case 'image':
-        return <WidgetWrapper title="Image"><ImageWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} /></WidgetWrapper>;
-      case 'hyperlink':
-        return <WidgetWrapper title="Hyperlink"><HyperlinkWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} /></WidgetWrapper>;
-      case 'calculator':
-        return (
-            <WidgetWrapper title="Calculator" noPadding={true}>
-                <CalculatorWidget 
-                    onExpand={() => setExpandedWidget({ index, type: 'calculator' })} 
-                />
-            </WidgetWrapper>
-        );
-      case 'stickynote':
-        return <WidgetWrapper title="Sticky Notes" noPadding={true}><StickyNoteWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} /></WidgetWrapper>;
-      case 'music':
-        return <WidgetWrapper title="Music Player" noPadding={true}><MusicPlayerWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} /></WidgetWrapper>;
-      case 'spotify':
-        return <WidgetWrapper title="Spotify" noPadding={true}><SpotifyWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} /></WidgetWrapper>;
-      case 'todolist':
-        return <WidgetWrapper title="To-Do List" noPadding={true}><ToDoListWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} /></WidgetWrapper>;
-      case 'terminal':
-        return (
-          <WidgetWrapper title="Terminal" noPadding={true}>
-            <TerminalWidget
-              onClose={() => onRemoveWidget(index)}
-              data={widget.data}
-              onCommand={(command, args) => onTerminalCommand(index, command, args)}
-            />
-          </WidgetWrapper>
-        );
-      case 'googlesearch':
-        return (
-            <WidgetWrapper title="Google Search" noPadding={true}>
-                <GoogleSearchWidget 
-                    data={widget.data} 
-                    onSearch={(query) => handleSearch(index, query)}
-                    onChange={(data) => updateWidgetData(index, data)}
-                    onExpand={() => setExpandedWidget({ index, type: 'googlesearch' })}
-                />
-            </WidgetWrapper>
-        );
-      case 'chatgpt':
-        return (
-            <WidgetWrapper title="ChatGPT" noPadding={true}>
-                <ChatGPTWidget 
-                    data={widget.data} 
-                    onChange={(data) => updateWidgetData(index, data)}
-                    onExpand={() => setExpandedWidget({ index, type: 'chatgpt' })}
-                />
-            </WidgetWrapper>
-        );
-      case 'news':
-        return <WidgetWrapper title="News" noPadding={true}><NewsWidget /></WidgetWrapper>;
-      case 'snake':
-        return <WidgetWrapper title="Snake Game" noPadding={true}><SnakeGameWidget /></WidgetWrapper>;
-      case 'dictionary':
-        return <WidgetWrapper title="Dictionary" noPadding={true}><DictionaryWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} /></WidgetWrapper>;
-      case 'zipgame':
-        return <WidgetWrapper title="Zip Game" noPadding={true}><ZipGameWidget /></WidgetWrapper>;
-      case 'tictactoe':
-        return <WidgetWrapper title="Tic-Tac-Toe" noPadding={true}><TicTacToeWidget /></WidgetWrapper>;
-      case 'game2048':
-        return <WidgetWrapper title="2048" noPadding={true}><Game2048Widget /></WidgetWrapper>;
-      case 'selecting':
-        return <WidgetSelectionView onSelect={(type) => onSelectWidget(index, type)} onCancel={() => onRemoveWidget(index)} />;
-      case 'empty':
-      default:
-        return (
-            <div 
-                onClick={() => onWidgetPlaceholderClick(index)}
-                className={`animated-gradient-placeholder rounded-xl w-full h-full cursor-pointer group shadow-sm hover:shadow-md transition-all ${dragOverIndex === index ? 'opacity-50' : ''}`}
-            >
-                <div className="w-full h-full bg-[var(--bg-primary)] rounded-[6px] flex flex-col items-center justify-center gap-2 relative overflow-hidden">
-                    {/* Hover effect background */}
-                    <div className="absolute inset-0 bg-[var(--accent)] opacity-0 group-hover:opacity-5 transition-opacity"></div>
-                    
-                    <div className="p-3 rounded-full bg-[var(--bg-secondary)] group-hover:scale-110 transition-transform duration-300">
-                        <PlusIcon className="w-6 h-6 text-[var(--accent)]" />
-                    </div>
-                    <span className="text-xs font-bold text-[var(--text-secondary)] group-hover:text-[var(--accent)] transition-colors">Add Widget</span>
-                </div>
-            </div>
-        );
+      case 'pomodoro': return <PomodoroWidget />;
+      case 'image': return <ImageWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} />;
+      case 'hyperlink': return <HyperlinkWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} />;
+      case 'calculator': return <CalculatorWidget onExpand={() => setExpandedWidget({ index, type: 'calculator' })} />;
+      case 'stickynote': return <StickyNoteWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} />;
+      case 'music': return <MusicPlayerWidget data={widget.data} />;
+      case 'spotify': return <SpotifyWidget isOnline={isOnline} data={widget.data} onChange={(data) => updateWidgetData(index, data)} />;
+      case 'todolist': return <ToDoListWidget data={widget.data} onChange={(data) => updateWidgetData(index, data)} />;
+      case 'terminal': return <TerminalWidget data={widget.data} onCommand={(c: any, a: any) => onTerminalCommand(index, c, a)} />;
+      case 'googlesearch': return <GoogleSearchWidget isOnline={isOnline} data={widget.data} onSearch={(q: any) => handleSearch(index, q)} onExpand={() => setExpandedWidget({ index, type: 'googlesearch' })} />;
+      case 'chatgpt': return <ChatGPTWidget isOnline={isOnline} data={widget.data} onChange={(d: any) => updateWidgetData(index, d)} onExpand={() => setExpandedWidget({ index, type: 'chatgpt' })} />;
+      case 'news': return <NewsWidget isOnline={isOnline} onChange={(d: any) => updateWidgetData(index, d)} isExpanded={false} />;
+      case 'wikipedia': return <WikipediaWidget isOnline={isOnline} data={widget.data} onChange={(d: any) => updateWidgetData(index, d)} onExpand={() => setExpandedWidget({ index, type: 'wikipedia' })} />;
+      case 'weather': return <WeatherWidget isOnline={isOnline} data={widget.data} onChange={(d: any) => updateWidgetData(index, d)} />;
+      case 'downloadpdf': return <DownloadPdfWidget onDownload={onDownloadNotes} />;
+      case 'tictactoe': return <TicTacToeWidget />;
+      case 'game2048': return <Game2048Widget />;
+      case 'snake': return <SnakeGameWidget />;
+      default: return null;
     }
   };
 
+  const isModern = layoutMode === 'modern';
+  const dockBaseClasses = isModern ? 'rounded-3xl border border-[var(--border-primary)]/10 bg-[var(--bg-secondary)]/10 backdrop-blur-sm overflow-hidden relative shadow-lg' : ''; 
+  const rootClasses = isModern ? 'flex flex-col h-full bg-transparent gap-3' : 'flex flex-col h-full overflow-hidden relative mediapanel-root bg-[var(--bg-primary)]';
+  const videoClasses = isModern
+    ? `flex-shrink-0 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${widgetsVisible ? 'h-[60%]' : 'h-full'} ${dockBaseClasses}`
+    : `flex-shrink-0 relative section-animated-bg transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${widgetsVisible ? 'h-[65%] border-b border-[var(--border-primary)]' : 'h-full'}`;
+  const widgetsClasses = isModern
+    ? `flex-grow relative custom-scrollbar transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${dockBaseClasses} p-4 pt-14`
+    : `flex-grow bg-[var(--bg-primary)] relative overflow-y-auto custom-scrollbar p-1.5 section-animated-bg transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] pt-4`;
 
   return (
-    <div className="mediapanel-root h-full bg-[var(--bg-primary)] p-4 transition-all overflow-y-auto custom-scrollbar relative">
-      <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="application/pdf" />
-      
-      {/* Expanded Widget Overlay */}
+    <div className={rootClasses}>
       {expandedWidget && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-[fade-in-scale_0.3s_ease-out] p-4">
-            <div className={`relative bg-[var(--bg-secondary)] shadow-2xl rounded-xl overflow-hidden border border-[var(--border-primary)] animate-[spring-up_0.5s_cubic-bezier(0.16,1,0.3,1)]
-                ${expandedWidget.type === 'calculator' ? 'w-[320px] h-[500px]' : 'w-full max-w-2xl h-[80vh]'}
-            `}>
-                 <button 
-                    onClick={() => setExpandedWidget(null)}
-                    className="absolute top-2 right-2 z-50 p-2 rounded-full bg-[var(--bg-primary)] hover:bg-[var(--border-primary)] shadow-md transition-all btn-press"
-                 >
-                     <ArrowsPointingInIcon className="w-5 h-5" />
-                 </button>
-                 
-                 {expandedWidget.type === 'calculator' && (
-                     <CalculatorWidget 
-                        isScientific={true} 
-                        onClose={() => setExpandedWidget(null)} 
-                    />
-                 )}
-                 {expandedWidget.type === 'googlesearch' && (
-                     <GoogleSearchWidget 
-                        data={widgets[expandedWidget.index].data} 
-                        onSearch={(q) => handleSearch(expandedWidget.index, q)}
-                        onChange={(data) => updateWidgetData(expandedWidget.index, data)}
-                     />
-                 )}
-                 {expandedWidget.type === 'chatgpt' && (
-                     <ChatGPTWidget 
-                        data={widgets[expandedWidget.index].data}
-                        onChange={(d) => updateWidgetData(expandedWidget.index, d)}
-                     />
-                 )}
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-[fadeIn_0.2s_ease-out]">
+            <div className={`relative bg-[var(--bg-secondary)] shadow-2xl rounded-xl overflow-hidden border border-[var(--border-primary)] animate-[spring-up_0.5s_cubic-bezier(0.16,1,0.3,1)] ${expandedWidget.type === 'calculator' ? 'w-[320px] h-[500px]' : 'w-full max-w-lg h-[70vh]'}`}>
+                <button onClick={() => setExpandedWidget(null)} className="absolute top-2 right-2 z-50 p-2 rounded-full bg-black/20 hover:bg-red-500 hover:text-white text-[var(--text-primary)] shadow-md backdrop-blur-md border border-white/10 transition-all"><MinimizeIcon className="w-5 h-5" /></button>
+                {expandedWidget.type === 'calculator' && <CalculatorWidget isScientific={true} onClose={() => setExpandedWidget(null)} />}
+                {expandedWidget.type === 'googlesearch' && <GoogleSearchWidget isOnline={isOnline} data={widgets[expandedWidget.index].data} onSearch={(q: any) => handleSearch(expandedWidget.index, q)} />}
+                {expandedWidget.type === 'chatgpt' && <ChatGPTWidget isOnline={isOnline} data={widgets[expandedWidget.index].data} onChange={(d: any) => updateWidgetData(expandedWidget.index, d)} />}
+                {expandedWidget.type === 'news' && <NewsWidget isOnline={isOnline} onChange={(d: any) => updateWidgetData(expandedWidget.index, d)} isExpanded={true} />}
+                {expandedWidget.type === 'wikipedia' && <WikipediaWidget isOnline={isOnline} data={widgets[expandedWidget.index].data} onChange={(d: any) => updateWidgetData(expandedWidget.index, d)} isExpanded={true} />}
+                {expandedWidget.type === 'weather' && <WeatherWidget isOnline={isOnline} data={widgets[expandedWidget.index].data} onChange={(d: any) => updateWidgetData(expandedWidget.index, d)} />}
             </div>
         </div>
       )}
-
-      {/* Change direction to column and stack items */}
-      <div className="flex flex-col h-full gap-4">
-        
-        {/* Main Media Area (Video/Upload) - Takes available space but shrinks if needed */}
-        <div className="flex-grow flex flex-col min-h-[300px] justify-center">
-            {mediaType === 'selection' && (
-                <div className="flex-grow flex flex-col items-center justify-center gap-6">
-                    {/* Enhanced Upload Section */}
-                    <div
-                        onClick={() => fileInputRef.current?.click()}
-                        onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
-                        onDragLeave={() => setIsDraggingFile(false)}
-                        onDrop={(e) => {
-                            e.preventDefault();
-                            setIsDraggingFile(false);
-                            if (e.dataTransfer.files && e.dataTransfer.files[0]?.type === 'application/pdf') {
-                                const file = e.dataTransfer.files[0];
-                                const url = URL.createObjectURL(file);
-                                setDocumentUrl(url);
-                                setMediaType('document');
-                            }
-                        }}
-                        className={`w-full max-w-md aspect-video rounded-xl flex flex-col items-center justify-center gap-4 cursor-pointer transition-all duration-300 group relative overflow-hidden
-                            ${isDraggingFile 
-                                ? 'bg-[var(--highlight-kp-bg)] border-2 border-dashed border-[var(--accent)] scale-105 shadow-lg' 
-                                : 'bg-[var(--bg-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent)] hover:shadow-xl'
-                            }
-                        `}
-                    >
-                        {/* Background decoration */}
-                        <div className="absolute inset-0 opacity-0 group-hover:opacity-1 transition-opacity bg-[var(--accent)] pointer-events-none"></div>
-                        
-                        <div className={`p-5 rounded-full transition-all duration-300 ${isDraggingFile ? 'bg-[var(--accent)] text-white scale-110' : 'bg-[var(--bg-primary)] text-[var(--accent)] shadow-sm group-hover:scale-110'}`}>
-                            <UploadIcon className="w-12 h-12" />
-                        </div>
-                        <div className="text-center z-10">
-                            <p className="font-bold text-xl mb-1 group-hover:text-[var(--accent)] transition-colors">Upload Document</p>
-                            <p className="text-sm text-[var(--text-secondary)]">Drag & Drop PDF or Click to Browse</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center w-full max-w-md gap-4 opacity-60">
-                        <div className="h-px bg-[var(--border-primary)] flex-grow"></div>
-                        <span className="text-xs text-[var(--text-secondary)] font-bold uppercase tracking-wider">or</span>
-                        <div className="h-px bg-[var(--border-primary)] flex-grow"></div>
-                    </div>
-
-                    <button
-                        onClick={() => setMediaType('video')}
-                        className="w-full max-w-md flex items-center justify-center gap-3 px-6 py-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-primary)] hover:border-[var(--accent)] hover:shadow-lg transition-all btn-press group"
-                    >
-                        <div className="p-2 rounded-full bg-[var(--bg-secondary)] group-hover:bg-[var(--accent)] group-hover:text-white transition-colors">
-                            <FilmIcon className="w-5 h-5" />
-                        </div>
-                        <span className="font-bold text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">Load Video from URL</span>
-                    </button>
+      {videoVisible && (
+        <div className={`${videoClasses} ${animStage >= 2 ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`} onContextMenu={(e) => onContextMenu(e, 'video-section')}>
+            {(animStage === 3 || animStage === 4) && (
+                <div className={`absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none bg-[var(--bg-secondary)]/60 backdrop-blur-xl border border-[var(--border-primary)]/20 shadow-2xl ${isModern ? 'rounded-3xl' : ''} ${animStage === 3 ? 'animate-[fadeIn_0.5s_ease-out]' : 'animate-brush-exit'}`}>
+                    <span className="text-4xl font-black uppercase tracking-[0.5em] text-[var(--text-primary)]/40 drop-shadow-sm animate-pulse">Media</span>
+                    <div className="h-0.5 w-64 bg-gradient-to-r from-transparent via-[var(--accent)]/50 to-transparent mt-4"></div>
                 </div>
             )}
-
-            {mediaType === 'video' && (
-            <div className="h-full flex flex-col">
-                <div className="flex gap-2 mb-4">
-                <button onClick={handleBackToSelection} className="px-3 py-1 font-semibold text-sm bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-md hover:bg-[var(--border-primary)] transition-all btn-press">
-                    Back
-                </button>
-                <input
-                    type="text"
-                    value={videoUrl}
-                    onChange={(e) => onVideoUrlChange(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="flex-grow px-3 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--accent)] transition-all"
-                />
-                <button
-                    onClick={onLoadVideo}
-                    className="px-4 py-2 font-semibold text-white bg-[var(--accent)] rounded-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--bg-primary)] focus:ring-[var(--accent)] transition-all btn-press"
-                >
-                    Load
-                </button>
-                </div>
-                <div className="flex-grow bg-[var(--bg-secondary)] rounded-lg flex items-center justify-center">
-                {videoId ? (
-                    <iframe
-                    className="w-full h-full rounded-lg"
-                    src={`https://www.youtube.com/embed/${videoId}`}
-                    title="YouTube video player"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    ></iframe>
-                ) : (
-                    <div className="text-[var(--text-secondary)]">
-                    Video will be displayed here
+            {mediaType === 'selection' ? (
+                <div className="w-full h-full flex flex-col items-center justify-center p-8 gap-10 animate-[popIn_0.4s_ease-out] overflow-hidden bg-[var(--bg-primary)]/50">
+                    <div className="relative z-10 flex flex-col md:flex-row gap-8 w-full max-w-4xl justify-center items-center">
+                        <button onClick={() => setInputType('video')} className={`group relative w-full md:w-80 h-44 rounded-[2.5rem] border-2 transition-all duration-500 shadow-2xl flex flex-col items-center justify-center gap-4 overflow-hidden ${inputType === 'video' ? 'border-red-500 bg-[var(--bg-primary)] scale-105 ring-4 ring-red-500/10' : 'border-[var(--border-primary)]/50 bg-transparent opacity-60 hover:opacity-100 hover:border-red-500 hover:bg-[var(--bg-secondary)]/50'}`}>
+                            <div className={`p-5 rounded-3xl transition-all duration-500 group-hover:scale-110 ${inputType === 'video' ? 'bg-red-500 text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]'}`}><PlayIcon className="w-10 h-10" /></div>
+                            <div className="text-center"><span className={`text-lg font-black uppercase tracking-tighter block ${inputType === 'video' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>Video Studio</span><span className="text-[10px] font-bold uppercase tracking-widest opacity-40">YouTube / Vimeo</span></div>
+                        </button>
+                        <button onClick={() => setInputType('pdf')} className={`group relative w-full md:w-80 h-44 rounded-[2.5rem] border-2 transition-all duration-500 shadow-2xl flex flex-col items-center justify-center gap-4 overflow-hidden ${inputType === 'pdf' ? 'border-orange-500 bg-[var(--bg-primary)] scale-105 ring-4 ring-orange-500/10' : 'border-[var(--border-primary)]/50 bg-transparent opacity-60 hover:opacity-100 hover:border-orange-500 hover:bg-[var(--bg-secondary)]/50'}`}>
+                            <div className={`p-5 rounded-3xl transition-all duration-500 group-hover:scale-110 ${inputType === 'pdf' ? 'bg-orange-500 text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]'}`}><DocumentTextIcon className="w-10 h-10" /></div>
+                            <div className="text-center"><span className={`text-lg font-black uppercase tracking-tighter block ${inputType === 'pdf' ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>Research Hub</span><span className="text-[10px] font-bold uppercase tracking-widest opacity-40">Document Analysis</span></div>
+                        </button>
                     </div>
-                )}
+                    <div className="relative z-10 w-full max-w-2xl animate-[smooth-rise_0.6s_ease-out_0.2s_both]">
+                        <div className="bg-[var(--bg-primary)]/80 backdrop-blur-2xl p-2 rounded-[2rem] border border-[var(--border-primary)]/50 shadow-2xl flex flex-col md:flex-row gap-2 ring-1 ring-white/10">
+                            {inputType === 'video' ? (
+                                <>
+                                    <div className="flex-grow flex items-center px-4 gap-3"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div><input value={videoUrl} onChange={e => onVideoUrlChange(e.target.value)} placeholder="Paste URL to stream..." className="w-full h-12 bg-transparent text-[var(--text-primary)] font-bold text-sm outline-none placeholder:text-[var(--text-secondary)]/30"/></div>
+                                    <button onClick={() => { setMediaType('video'); onLoadVideo(); }} disabled={!isOnline || !videoUrl.trim()} className={`h-12 px-10 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl active:scale-95 ${!isOnline || !videoUrl.trim() ? 'bg-slate-500/20 text-slate-500 cursor-not-allowed opacity-50' : 'bg-red-500 text-white hover:opacity-90 hover:shadow-red-500/30'}`}>Initialize Stream</button>
+                                </>
+                            ) : (
+                                <div onClick={() => fileInputRef.current?.click()} className="w-full h-14 border-2 border-dashed border-orange-500/50 rounded-[1.5rem] flex items-center justify-center gap-4 cursor-pointer hover:bg-orange-500/5 hover:border-orange-500 transition-all group/upload">
+                                    <div className="p-2 bg-[var(--bg-secondary)] rounded-lg group-hover/upload:bg-orange-500 group-hover/upload:text-white transition-colors"><UploadIcon className="w-5 h-5" /></div>
+                                    <span className="text-xs font-black uppercase tracking-widest text-[var(--text-secondary)] group-hover/upload:text-[var(--text-primary)] transition-colors">Mount Local Protocol (PDF)</span>
+                                    <input type="file" ref={fileInputRef} className="hidden" accept="application/pdf" onChange={handleFileChange}/>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
-            </div>
-            )}
-
-            {mediaType === 'document' && (
-            <div className="h-full flex flex-col">
-                <div className="flex justify-end mb-2">
-                <button onClick={handleBackToSelection} className="px-3 py-1 font-semibold text-sm bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-md hover:bg-[var(--border-primary)] transition-all btn-press">
-                    Back
-                </button>
+            ) : mediaType === 'video' ? (
+                <div className="w-full h-full bg-black relative group animate-[fadeIn_0.4s_ease-out] overflow-hidden pt-1">
+                    <div className="absolute top-1 left-0 right-0 h-14 bg-gradient-to-b from-black/80 via-black/40 to-transparent z-30 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-between px-6 transform -translate-y-2 group-hover:translate-y-0">
+                         <div className="flex items-center gap-4"><div className="px-3 py-1 rounded-full bg-red-500 text-white flex items-center gap-2 shadow-lg border border-white/10"><div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div><span className="text-[9px] font-black uppercase tracking-widest">Live Stream</span></div><span className="text-[10px] font-bold text-white/60 uppercase tracking-tighter truncate max-w-[280px] drop-shadow-md">{videoUrl}</span></div>
+                         <div className="flex items-center gap-2"><button onClick={() => { setMediaType('selection'); onVideoUrlChange(''); }} className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all backdrop-blur-md border border-white/5" title="Switch Source"><ArrowPathIcon className="w-4 h-4" /></button><button onClick={handleBackToSelection} className="p-2.5 bg-rose-500/20 hover:bg-rose-500/40 rounded-xl text-rose-300 transition-all backdrop-blur-md border border-rose-500/20" title="Disconnect"><CloseIcon className="w-4 h-4" /></button></div>
+                    </div>
+                    <div className="relative z-10 w-full h-full flex items-center justify-center p-0">
+                        {!isOnline ? (
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-6 bg-slate-950 text-slate-500"><div className="p-8 rounded-full bg-slate-900 border border-slate-800 animate-pulse shadow-2xl"><SignalSlashIcon className="w-16 h-16 opacity-30" /></div><span className="font-black text-sm tracking-[0.4em] uppercase opacity-40">System Link Broken</span></div>
+                        ) : standardizedEmbedUrl ? (
+                            <iframe className="w-full h-full shadow-2xl" src={standardizedEmbedUrl} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen sandbox="allow-scripts allow-same-origin allow-presentation allow-popups allow-forms" referrerPolicy="strict-origin-when-cross-origin" onLoad={() => setIframeLoading(false)}/>
+                        ) : null}
+                    </div>
                 </div>
-                <div className="flex-grow bg-[var(--bg-secondary)] rounded-lg">
-                    {documentUrl && <embed src={documentUrl} type="application/pdf" className="w-full h-full rounded-lg border-0" />}
+            ) : (
+                <div className="w-full h-full relative animate-[fadeIn_0.3s_ease-out] bg-[var(--bg-secondary)] flex flex-col pt-1">
+                    <div className="flex-none h-14 border-b border-[var(--border-primary)]/30 bg-[var(--bg-primary-glass)] backdrop-blur-xl flex items-center justify-between px-6 z-20">
+                        <div className="flex items-center gap-3"><div className="p-2 bg-orange-500 rounded-lg text-white shadow-md"><DocumentTextIcon className="w-4 h-4" /></div><span className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)]">Research Hub</span></div>
+                        <button onClick={handleBackToSelection} className="p-2 rounded-xl bg-[var(--bg-secondary)] hover:bg-rose-500/10 text-[var(--text-secondary)] hover:text-rose-500 transition-all border border-[var(--border-primary)]/50"><CloseIcon className="w-4 h-4" /></button>
+                    </div>
+                    <div className="flex-grow relative"><iframe src={documentUrl!} className="w-full h-full border-none" title="PDF Viewer" /></div>
                 </div>
-            </div>
             )}
         </div>
-
-        {/* Widgets Area - Stacked Below */}
-        <div className="flex-shrink-0 w-full flex flex-col gap-2 pb-4">
-            <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] font-semibold uppercase">
-                <div className="h-px flex-grow bg-[var(--border-primary)]"></div>
-                <span>Widgets</span>
-                <div className="h-px flex-grow bg-[var(--border-primary)]"></div>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-4">
-                    {widgets.map((widget, i) => (
-                    <div 
-                        key={i} 
-                        draggable={true}
-                        onDragStart={(e) => handleDragStart(e, i)}
-                        onDragOver={(e) => handleDragOver(e, i)}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => handleDrop(e, i)}
-                        className={`widget-container relative aspect-square rounded-lg flex items-center justify-center transition-all 
-                            ${activeWidgetIndex === i ? 'active' : ''} 
-                            ${widget.type === 'empty' ? '' : 'border border-[var(--border-primary)]'}
-                            ${widget.type === 'empty' || widget.isBgToggled ? 'bg-transparent' : 'bg-[var(--bg-secondary)]'}
-                        `}
-                        onClick={(e) => {
-                            if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input') || (e.target as HTMLElement).closest('textarea') || (e.target as HTMLElement).closest('a')) return;
-                            handleWidgetContainerClick(i);
-                        }}
-                    >
-                        {activeWidgetIndex === i && widget.type !== 'empty' && widget.type !== 'selecting' && (
-                        <div className="absolute -top-2 -right-2 z-20 flex gap-1">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onRemoveWidget(i); }}
-                                className="p-1 rounded-full bg-[var(--danger)] text-white shadow-md hover:opacity-90 btn-press"
-                                title="Remove Widget"
-                            >
-                            <CloseIcon className="w-3 h-3" />
-                            </button>
-                        </div>
+      )}
+      {widgetsVisible && (
+        <div className={`${widgetsClasses} ${animStage >= 2 ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'} ${isModern ? 'bg-[var(--bg-primary)]/50' : ''}`} onContextMenu={(e) => onContextMenu(e, 'widget-section')}>
+            {(animStage === 3 || animStage === 4) && (
+                <div className={`absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none bg-[var(--bg-secondary)]/60 backdrop-blur-xl border border-[var(--border-primary)]/20 shadow-2xl ${isModern ? 'rounded-3xl' : ''} ${animStage === 3 ? 'animate-[fadeIn_0.5s_ease-out]' : 'animate-brush-exit'}`}>
+                    <span className="text-4xl font-black uppercase tracking-[0.5em] text-[var(--text-primary)]/40 drop-shadow-sm animate-pulse">Widgets</span>
+                    <div className="h-0.5 w-64 bg-gradient-to-r from-transparent via-[var(--accent)]/50 to-transparent mt-4"></div>
+                </div>
+            )}
+            <div className={`grid grid-cols-2 md:grid-cols-3 ${isModern ? 'gap-2' : 'gap-1.5'} pb-20 w-full auto-rows-min`}>
+                {widgets.map((widget, index) => (
+                    <div key={index} draggable={widget.type !== 'selecting'} onDragStart={(e) => handleDragStart(e, index, widget)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)} onDragEnd={handleDragEnd} className={`relative aspect-square rounded-2xl overflow-hidden transition-all duration-200 ease-out group shadow-sm hover:shadow-xl ${activeWidgetIndex===index ? 'ring-2 ring-[var(--accent)] z-20' : ''} ${dragOverIndex === index ? 'scale-105 opacity-90 ring-2 ring-[var(--accent)] z-20' : ''} ${widget.type==='empty' ? 'border-2 border-dashed border-[var(--border-primary)] cursor-grab active:cursor-grabbing' : 'bg-[var(--bg-secondary)] border border-[var(--border-primary)] cursor-grab active:cursor-grabbing'}`} onMouseMove={handleWidgetMouseMove} onMouseLeave={handleWidgetMouseLeave} onClick={() => { if (widget.type === 'empty') onWidgetPlaceholderClick(index); else onSetActiveWidget(index); }}>
+                        {widget.type !== 'empty' && widget.type !== 'selecting' && (
+                            <div className="absolute -top-1 -right-1 z-50 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); onRemoveWidget(index); }} className="p-1.5 bg-rose-500 text-white rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all border border-white/20"><CloseIcon className="w-3.5 h-3.5" /></button></div>
                         )}
-                        {renderWidget(widget, i)}
+                        {widget.type === 'empty' ? (
+                            <div className="w-full h-full bg-[var(--bg-primary)] rounded-[14px] flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors">
+                                <div className="p-3 rounded-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] group-hover:border-[var(--accent)]"><PlusIcon className="w-6 h-6 text-[var(--accent)]" /></div>
+                                <span className="text-[10px] font-black uppercase tracking-tight text-[var(--text-secondary)]">Add Widget</span>
+                            </div>
+                        ) : widget.type === 'selecting' ? (
+                            <WidgetSelectionView onSelect={(type) => onSelectWidget(index, type)} onCancel={() => onRemoveWidget(index)} iconSize="normal" />
+                        ) : (
+                            <div className="w-full h-full overflow-hidden pointer-events-none">{renderWidgetContent(widget, index)}</div>
+                        )}
                     </div>
-                    ))}
+                ))}
             </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
-
 export default MediaPanel;

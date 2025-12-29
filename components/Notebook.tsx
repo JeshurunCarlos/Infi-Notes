@@ -1,27 +1,19 @@
 
 import React, { useState, useEffect, useRef, forwardRef } from 'react';
-import { SparklesIcon, LightBulbIcon, MicrophoneIcon, ImageIcon, NoSymbolIcon, ClipboardIcon, TagIcon, CloseIcon, ChevronLeftIcon, ChevronRightIcon, HotDogMenuIcon } from './Icons';
+import { createPortal } from 'react-dom';
+// Fixed: Removed non-existent Bars3Icon from imports
+import { SparklesIcon, LightBulbIcon, MicrophoneIcon, ImageIcon, NoSymbolIcon, ClipboardIcon, TagIcon, CloseIcon, ChevronLeftIcon, ChevronRightIcon, SpeakerWaveIcon, PauseIcon, CogIcon, CheckIcon, SignalSlashIcon, CubeIcon, ArrowsPointingOutIcon, MinimizeIcon, PlusIcon, PencilIcon } from './Icons';
 import Spinner from './Spinner';
-import { ToDoItem } from '../types';
+import { ToDoItem, FloatingWidget, WidgetType } from '../types';
 import ToDoList from './ToDoList';
 import EditorToolbar from './EditorToolbar';
 import SlashMenu from './SlashMenu';
 import IconPicker from './IconPicker';
-
-// Define types for SpeechRecognition to support browser prefixes
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-interface SpeechRecognitionErrorEvent extends Event {
-    error: string;
-}
-declare global {
-  interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
-  }
-}
+import { generateSpeechFromText, performGoogleSearch } from '../lib/ai';
+import { WritingPen } from './WritingPen';
+import MindMap from './MindMap';
+import SummaryView from './SummaryView';
+import { PomodoroWidget, ImageWidget, HyperlinkWidget, CalculatorWidget, StickyNoteWidget, MusicPlayerWidget, SpotifyWidget, ToDoListWidget, TerminalWidget, GoogleSearchWidget, DictionaryWidget, TicTacToeWidget, SnakeGameWidget, ChatGPTWidget, Game2048Widget, NewsWidget, WikipediaWidget, WeatherWidget, DownloadPdfWidget, WidgetSelectionView } from './Widgets';
 
 interface NotebookProps {
   pageContent: string;
@@ -39,31 +31,21 @@ interface NotebookProps {
   isSummarizing: boolean;
   onStartRecall: () => void;
   isGeneratingQuiz: boolean;
+  summaryContent: string | null;
+  onCloseSummary: () => void;
+  onAppendSummary: (text: string) => void;
   pageTodos?: ToDoItem[];
   onTodosChange: (todos: ToDoItem[]) => void;
-  onToggleSidebar?: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+  onOpenSettings?: () => void;
+  onAutoEmbed?: (url: string) => void;
+  isOnline?: boolean;
+  onBackToShelf?: () => void;
+  floatingWidgets?: FloatingWidget[];
+  onAddFloatingWidget?: (widget: FloatingWidget) => void;
+  onRemoveFloatingWidget?: (id: string) => void;
+  onUpdateFloatingWidget?: (id: string, updates: Partial<FloatingWidget>) => void;
 }
-
-// Better color generator with consistent pastel palette
-const stringToColor = (str: string) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = Math.abs(hash % 360);
-    // Use HSL for nice pastel colors, ensuring good readability
-    return `hsl(${hue}, 75%, 85%)`; 
-};
-
-// Darker text color for contrast
-const stringToTextColor = (str: string) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = Math.abs(hash % 360);
-    return `hsl(${hue}, 80%, 25%)`;
-};
 
 const Notebook = forwardRef<HTMLDivElement, NotebookProps>(({
   pageContent,
@@ -81,471 +63,368 @@ const Notebook = forwardRef<HTMLDivElement, NotebookProps>(({
   isSummarizing,
   onStartRecall,
   isGeneratingQuiz,
+  summaryContent,
+  onCloseSummary,
+  onAppendSummary,
   pageTodos,
   onTodosChange,
-  onToggleSidebar
+  onContextMenu,
+  onOpenSettings,
+  onAutoEmbed,
+  isOnline = true,
+  onBackToShelf,
+  floatingWidgets = [],
+  onAddFloatingWidget,
+  onRemoveFloatingWidget,
+  onUpdateFloatingWidget
 }, ref) => {
   const contentEditableRef = useRef<HTMLDivElement>(null);
-  const [slashMenuPosition, setSlashMenuPosition] = useState<{ top: number; left: number } | null>(null);
-  const [iconPickerPos, setIconPickerPos] = useState<{ top: number; left: number } | null>(null);
-  const [isSpeechListening, setIsSpeechListening] = useState(false);
-  const [isTodoListOpen, setIsTodoListOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dragOverNotebook, setDragOverNotebook] = useState(false);
+  const [penState, setPenState] = useState({ x: 0, y: 0, opacity: 0, isWriting: false });
+  const [showPenAnimation, setPenAnimation] = useState(() => {
+      const saved = localStorage.getItem('infi-show-pen');
+      return saved === null ? true : saved === 'true';
+  });
   const [showAiActions, setShowAiActions] = useState(false);
-  
-  const coverInputRef = useRef<HTMLInputElement>(null);
-  const toolbarContainerRef = useRef<HTMLDivElement>(null);
+  const [showMindMap, setShowMindMap] = useState(false);
+  const [showMargin, setShowMargin] = useState(true);
+  const [spellCheck, setSpellCheck] = useState(true);
+  const [showEditorSettings, setShowEditorSettings] = useState(false);
+  const [isDictating, setIsDictating] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Tagging State
-  const [tagInput, setTagInput] = useState('');
-  const [showTagDropdown, setShowTagDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Sync content from props to editable div
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== pageContent) {
-        // Avoid cursor jumps if we are focused
         if (document.activeElement !== contentEditableRef.current) {
              contentEditableRef.current.innerHTML = pageContent;
         }
     }
   }, [pageContent]);
 
-  // Click outside listener for dropdown
-  useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-          if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-              setShowTagDropdown(false);
-          }
-      };
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOverNotebook(false);
+      const jsonData = e.dataTransfer.getData('application/json');
+      if (!jsonData) return;
+      
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
 
-  // Global '/' Shortcut to focus editor
-  useEffect(() => {
-      const handleGlobalKeyDown = (e: KeyboardEvent) => {
-          if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.target as HTMLElement).isContentEditable) {
-              e.preventDefault();
-              contentEditableRef.current?.focus();
+      try {
+          const { type, data } = JSON.parse(jsonData);
+          const x = e.clientX - rect.left - 125;
+          const y = e.clientY - rect.top - 125;
+          
+          if (onAddFloatingWidget) {
+              onAddFloatingWidget({
+                  id: Date.now().toString(),
+                  type,
+                  data: data || {},
+                  x,
+                  y
+              });
           }
-      };
-      window.addEventListener('keydown', handleGlobalKeyDown);
-      return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
+      } catch (err) {
+          console.error("Drop failed", err);
+      }
+  };
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
-    const content = e.currentTarget.innerHTML;
-    onNotesChange(content);
-    
-    // Check for slash command
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        // Simple slash detection
-        if ((e.nativeEvent as InputEvent).data === '/') {
-            const rect = range.getBoundingClientRect();
-            setSlashMenuPosition({ top: rect.bottom + 5, left: rect.left });
-        }
-    }
-  };
-  
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (slashMenuPosition && e.key === 'Escape') {
-          setSlashMenuPosition(null);
-      }
+    onNotesChange(e.currentTarget.innerHTML);
   };
 
-  const executeCommand = (command: string, arg?: string) => {
-      contentEditableRef.current?.focus();
-      
-      // Delete the slash
-      document.execCommand('delete', false); 
-      
-      if (command === 'insertImage') {
-          const url = prompt('Enter image URL:');
-          if (url) document.execCommand(command, false, url);
-      } else {
-          document.execCommand(command, false, arg);
-      }
-      setSlashMenuPosition(null);
-  };
-
-  const toggleSpeech = () => {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      
+  const startDictation = () => {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SpeechRecognition) {
-          alert("Speech recognition not supported in this browser. Please try Chrome, Edge, or Safari.");
-          return;
-      }
-      
-      if (isSpeechListening) {
-          recognitionRef.current?.stop();
-          setIsSpeechListening(false);
+          alert("Your browser does not support Speech Recognition.");
           return;
       }
 
-      const recognition = new SpeechRecognition();
-      recognitionRef.current = recognition;
-      recognition.continuous = true; // Enable continuous listening for better dictation
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-      
-      recognition.onstart = () => setIsSpeechListening(true);
-      recognition.onend = () => setIsSpeechListening(false);
-      
-      recognition.onerror = (event: any) => {
-          console.error("Speech Recognition Error", event.error);
-          setIsSpeechListening(false);
-      };
-      
-      recognition.onresult = (event: any) => {
-          let finalTranscript = '';
-          const selection = window.getSelection();
-          if (!selection || selection.rangeCount === 0) return;
+      if (!recognitionRef.current) {
+          recognitionRef.current = new SpeechRecognition();
+          recognitionRef.current.continuous = true;
+          recognitionRef.current.interimResults = true;
+          recognitionRef.current.lang = 'en-US';
 
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-              if (event.results[i].isFinal) {
-                  finalTranscript += event.results[i][0].transcript + ' ';
+          recognitionRef.current.onresult = (event: any) => {
+              let finalTranscript = '';
+              for (let i = event.resultIndex; i < event.results.length; ++i) {
+                  if (event.results[i].isFinal) {
+                      finalTranscript += event.results[i][0].transcript;
+                  }
               }
-          }
-          
-          if (finalTranscript) {
-               document.execCommand('insertText', false, finalTranscript);
-          }
-      };
-      
-      recognition.start();
-  };
+              
+              if (finalTranscript) {
+                  const editor = contentEditableRef.current;
+                  if (editor) {
+                      const text = finalTranscript.trim();
+                      const selection = window.getSelection();
+                      if (selection && selection.rangeCount > 0) {
+                          const range = selection.getRangeAt(0);
+                          const textNode = document.createTextNode(" " + text + " ");
+                          range.insertNode(textNode);
+                          range.setStartAfter(textNode);
+                          range.setEndAfter(textNode);
+                          selection.removeAllRanges();
+                          selection.addRange(range);
+                      } else {
+                          editor.innerHTML += " " + text + " ";
+                      }
+                      onNotesChange(editor.innerHTML);
+                  }
+              }
+          };
 
-  const handleIconClick = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const rect = e.currentTarget.getBoundingClientRect();
-      setIconPickerPos({ top: rect.bottom + 10, left: rect.left });
-  };
+          recognitionRef.current.onerror = (event: any) => {
+              console.error('Speech recognition error', event.error);
+              setIsDictating(false);
+          };
 
-  // Tag Management
-  const handleAddTag = (tag: string) => {
-      const trimmedTag = tag.trim();
-      if (trimmedTag && !pageTags.includes(trimmedTag)) {
-          onTagsChange([...pageTags, trimmedTag]);
+          recognitionRef.current.onend = () => {
+              setIsDictating(false);
+          };
       }
-      setTagInput('');
-      setShowTagDropdown(false);
-  };
 
-  const handleRemoveTag = (tagToRemove: string) => {
-      onTagsChange(pageTags.filter(t => t !== tagToRemove));
-  };
-
-  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') {
-          e.preventDefault();
-          if (tagInput.trim()) {
-            handleAddTag(tagInput);
-          }
-      } else if (e.key === 'Backspace' && !tagInput && pageTags.length > 0) {
-          // Remove last tag
-          const newTags = [...pageTags];
-          newTags.pop();
-          onTagsChange(newTags);
-      } else if (e.key === 'Escape') {
-          setShowTagDropdown(false);
+      if (isDictating) {
+          recognitionRef.current.stop();
+          setIsDictating(false);
+      } else {
+          recognitionRef.current.start();
+          setIsDictating(true);
+          setShowAiActions(false);
       }
   };
 
-  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            if (ev.target?.result && typeof ev.target.result === 'string') {
-                onCoverChange(ev.target.result);
-            }
-        };
-        reader.readAsDataURL(file);
-        // Reset input so the same file can be selected again if needed
-        e.target.value = '';
-    }
+  const handleFloatingWidgetMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const width = rect.width;
+    const height = rect.height;
+    const xPct = (x / width - 0.5) * 20; 
+    const yPct = (y / height - 0.5) * -20; 
+    e.currentTarget.style.transform = `perspective(1000px) rotateX(${yPct}deg) rotateY(${xPct}deg) scale(1.05)`;
+    e.currentTarget.style.zIndex = '150';
   };
 
-  const scrollToolbar = (direction: 'left' | 'right') => {
-    if (toolbarContainerRef.current) {
-        const scrollAmount = 200;
-        toolbarContainerRef.current.scrollBy({
-            left: direction === 'left' ? -scrollAmount : scrollAmount,
-            behavior: 'smooth'
+  const handleFloatingWidgetMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1)`;
+    e.currentTarget.style.zIndex = '100';
+  };
+
+  const renderFloatingWidget = (w: FloatingWidget) => {
+    const handleWidgetDrag = (e: React.MouseEvent) => {
+        if (!w.isDragging) return;
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        onUpdateFloatingWidget?.(w.id, {
+            x: e.clientX - rect.left - 125,
+            y: e.clientY - rect.top - 15
         });
-    }
+    };
+
+    const renderInnerContent = () => {
+        if (w.type === 'empty') {
+            return (
+                <div onClick={() => onUpdateFloatingWidget?.(w.id, { type: 'selecting' })} className="w-full h-full bg-[var(--bg-primary)] flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors group/inner">
+                    <div className="p-4 rounded-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] group-hover/inner:border-[var(--accent)] transition-all"><PlusIcon className="w-8 h-8 text-[var(--accent)]" /></div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">Add Widget</span>
+                </div>
+            );
+        }
+        if (w.type === 'selecting') {
+            return <WidgetSelectionView onSelect={(type) => onUpdateFloatingWidget?.(w.id, { type, data: {} })} onCancel={() => onRemoveFloatingWidget?.(w.id)} iconSize="normal" />;
+        }
+        switch (w.type) {
+            case 'pomodoro': return <PomodoroWidget />;
+            case 'chatgpt': return <ChatGPTWidget data={w.data} isOnline={isOnline} onChange={(d: any) => onUpdateFloatingWidget?.(w.id, { data: d })} />;
+            case 'todolist': return <ToDoListWidget data={w.data} onChange={(d: any) => onUpdateFloatingWidget?.(w.id, { data: d })} />;
+            case 'calculator': return <CalculatorWidget />;
+            case 'googlesearch': return <GoogleSearchWidget data={w.data} isOnline={isOnline} onSearch={async (q: string) => { const res = await performGoogleSearch(q); onUpdateFloatingWidget?.(w.id, { data: { ...res, query: q } }); }} />;
+            case 'stickynote': return <StickyNoteWidget data={w.data} onChange={(d: any) => onUpdateFloatingWidget?.(w.id, { data: d })} />;
+            case 'news': return <NewsWidget isOnline={isOnline} data={w.data} onChange={(d: any) => onUpdateFloatingWidget?.(w.id, { data: d })} />;
+            case 'wikipedia': return <WikipediaWidget data={w.data} isOnline={isOnline} onChange={(d: any) => onUpdateFloatingWidget?.(w.id, { data: d })} />;
+            case 'weather': return <WeatherWidget data={w.data} isOnline={isOnline} onChange={(d: any) => onUpdateFloatingWidget?.(w.id, { data: d })} />;
+            case 'spotify': return <SpotifyWidget data={w.data} isOnline={isOnline} onChange={(d: any) => onUpdateFloatingWidget?.(w.id, { data: d })} />;
+            case 'music': return <MusicPlayerWidget data={w.data} />;
+            case 'image': return <ImageWidget data={w.data} onChange={(d: any) => onUpdateFloatingWidget?.(w.id, { data: d })} />;
+            case 'hyperlink': return <HyperlinkWidget data={w.data} onChange={(d: any) => onUpdateFloatingWidget?.(w.id, { data: d })} />;
+            case 'terminal': return <TerminalWidget data={w.data} onCommand={(c: any, a: any) => { const history = w.data?.history || []; onUpdateFloatingWidget?.(w.id, { data: { ...w.data, history: [...history, `> ${c} ${a.join(' ')}`, `Command executed.`] } }); }} />;
+            case 'tictactoe': return <TicTacToeWidget />;
+            case 'snake': return <SnakeGameWidget />;
+            case 'game2048': return <Game2048Widget />;
+            default: return <div className="p-4 text-xs italic">Unsupported Detached Type</div>;
+        }
+    };
+
+    return (
+        <div 
+            key={w.id} 
+            className={`w-[250px] h-[250px] bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-2xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto transition-transform duration-200 ease-out group/float ${w.type === 'empty' ? 'rgb-gradient-border' : ''}`}
+            style={{ position: 'absolute' as const, left: w.x, top: w.y, zIndex: 100 }}
+            onMouseMove={(e) => { handleFloatingWidgetMouseMove(e); handleWidgetDrag(e); }}
+            onMouseLeave={handleFloatingWidgetMouseLeave}
+            onMouseUp={() => onUpdateFloatingWidget?.(w.id, { isDragging: false })}
+        >
+            <div className="h-8 bg-[var(--bg-primary)]/50 backdrop-blur-sm border-b border-[var(--border-primary)] flex items-center justify-between px-2 cursor-grab active:cursor-grabbing shrink-0 z-20" onMouseDown={() => onUpdateFloatingWidget?.(w.id, { isDragging: true })}>
+                <div className="flex items-center gap-2"><span className="text-[9px] font-black uppercase text-[var(--accent)] tracking-widest">{w.type}</span></div>
+                <button onClick={() => onRemoveFloatingWidget?.(w.id)} className="p-1 hover:bg-rose-500/20 rounded-full text-rose-500 transition-colors"><CloseIcon className="w-3.5 h-3.5" /></button>
+            </div>
+            <div className={`flex-grow overflow-hidden relative ${w.isDragging ? 'pointer-events-none' : ''}`}>{renderInnerContent()}</div>
+        </div>
+    );
   };
 
-  const filteredTags = allTags.filter(t => t.toLowerCase().includes(tagInput.toLowerCase()) && !pageTags.includes(t));
+  const handleTogglePen = () => {
+    const newState = !showPenAnimation;
+    setPenAnimation(newState);
+    localStorage.setItem('infi-show-pen', String(newState));
+  };
 
   return (
-    <div className={`flex flex-col h-full bg-[var(--bg-primary)] relative overflow-hidden notebook-root transition-all`} ref={ref as any}>
-      {/* Hidden file input for cover upload */}
-      <input 
-        type="file" 
-        ref={coverInputRef} 
-        className="hidden" 
-        accept="image/*" 
-        onChange={handleCoverUpload} 
-      />
+    <div 
+        className={`flex flex-col h-full bg-transparent relative overflow-hidden notebook-root transition-all ${dragOverNotebook ? 'ring-4 ring-inset ring-[var(--accent)]/30 bg-[var(--accent)]/5' : ''}`} 
+        ref={(node) => { containerRef.current = node; if (typeof ref === 'function') ref(node); else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node; }}
+        onDragOver={(e) => { e.preventDefault(); setDragOverNotebook(true); }}
+        onDragLeave={() => setDragOverNotebook(false)}
+        onDrop={handleDrop}
+        onContextMenu={onContextMenu}
+    >
+      {showPenAnimation && <WritingPen x={penState.x} y={penState.y} opacity={penState.opacity} isWriting={penState.isWriting} />}
 
-      <div className="flex-shrink-0 relative z-10 bg-[var(--bg-primary)]">
-          {/* Cover Image Area */}
-          <div className={`relative w-full bg-[var(--bg-secondary)] z-0 transition-all duration-300 ease-in-out overflow-hidden group/cover ${
-              pageCover 
-              ? 'h-40 border-b border-[var(--border-primary)]' 
-              : 'h-1 hover:h-40 hover:border-b border-[var(--border-primary)]'
-          }`}>
+      <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">{floatingWidgets.map(renderFloatingWidget)}</div>
+
+      {(isSummarizing || isGeneratingQuiz) && (
+          <div className="absolute bottom-6 right-6 z-[60] animate-[popIn_0.4s_cubic-bezier(0.16,1,0.3,1)]">
+              <div className="bg-[var(--bg-secondary-glass)] backdrop-blur-2xl border border-[var(--border-primary)] rounded-2xl p-4 shadow-2xl flex items-center gap-4 min-w-[240px] ring-1 ring-white/10">
+                  <div className="relative">
+                      <div className="absolute inset-0 bg-[var(--accent)]/20 blur-xl rounded-full animate-pulse"></div>
+                      <div className="relative p-2.5 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-primary)] text-[var(--accent)]">
+                          {isSummarizing ? <SparklesIcon className="w-6 h-6 animate-[spin_3s_linear_infinite]" /> : <LightBulbIcon className="w-6 h-6 animate-pulse" />}
+                      </div>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[var(--accent)] opacity-80">Gemini Neural Link</span>
+                      <span className="text-xs font-bold text-[var(--text-primary)]">{isSummarizing ? "Synthesizing Protocol..." : "Generating Assessment..."}</span>
+                  </div>
+                  <div className="ml-auto"><Spinner className="w-4 h-4 text-[var(--text-secondary)] opacity-40" /></div>
+              </div>
+          </div>
+      )}
+
+      <div className="flex-shrink-0 relative z-10 bg-transparent">
+          <div className={`relative w-full bg-[var(--bg-secondary)]/10 z-0 transition-all duration-300 ease-in-out overflow-hidden group/cover ${pageCover ? 'h-40 border-b border-[var(--border-primary)]/10' : 'h-1 hover:h-40 hover:border-b border-[var(--border-primary)]/10'}`}>
               {pageCover ? (
                   <>
                     <img src={pageCover} alt="Cover" className="w-full h-full object-cover opacity-90" />
-                    {/* Enhanced gradient fade to prevent text overlap issues */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg-primary)] via-[var(--bg-primary)]/30 to-transparent opacity-100"></div>
-                    
-                    {/* Controls for existing cover */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg-primary)] via-[var(--bg-primary)]/10 to-transparent opacity-100"></div>
                     <div className="absolute bottom-2 right-2 opacity-0 group-hover/cover:opacity-100 transition-opacity z-20 flex gap-2">
-                        <button 
-                            className="bg-black/50 text-white p-1.5 rounded hover:bg-black/70 transition-colors btn-press text-xs flex items-center gap-1"
-                            onClick={() => coverInputRef.current?.click()}
-                        >
-                            <ImageIcon className="w-3 h-3" /> Change Cover
-                        </button>
-                        <button 
-                            className="bg-black/50 text-white p-1.5 rounded hover:bg-black/70 transition-colors btn-press"
-                            onClick={() => onCoverChange("")}
-                        >
-                            <NoSymbolIcon className="w-3 h-3" />
-                        </button>
+                        <button className="bg-black/40 text-white p-1.5 rounded hover:bg-black/60 transition-colors btn-press text-[10px] font-black uppercase flex items-center gap-1 border border-white/10 backdrop-blur-sm"><ImageIcon className="w-3 h-3" /> Update</button>
+                        <button className="bg-rose-50/50 text-white p-1.5 rounded hover:bg-rose-600 transition-colors btn-press border border-white/10 backdrop-blur-sm" onClick={() => onCoverChange("")}><NoSymbolIcon className="w-3 h-3" /></button>
                     </div>
                   </>
               ) : (
-                  /* Empty State - Clickable Area to Add Cover - ONLY on top hover */
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-0 group-hover/cover:opacity-100 transition-opacity">
-                      <button 
-                          className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--bg-primary)] shadow-sm border border-[var(--border-primary)] hover:scale-105 transition-transform"
-                          onClick={() => coverInputRef.current?.click()}
-                      >
-                          <ImageIcon className="w-4 h-4" />
-                          <span className="text-xs font-semibold">Add Cover</span>
-                      </button>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--bg-primary-glass)] shadow-2xl border border-[var(--border-primary)] hover:scale-105 transition-transform"><ImageIcon className="w-4 h-4" /><span className="text-[10px] font-black uppercase tracking-widest">Set Cover</span></button>
                   </div>
               )}
           </div>
 
-          {/* Header Info */}
-          <div className="px-8 pt-8 pb-4 relative z-10 group/header">
-              
-              {/* Sidebar Toggle - Positioned above emoji */}
-              {onToggleSidebar && (
-                  <button 
-                      onClick={onToggleSidebar}
-                      className="absolute left-8 top-2 p-1.5 rounded-full hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors btn-press z-30"
-                      title="Toggle Sidebar"
-                  >
-                      <HotDogMenuIcon className="w-5 h-5" />
-                  </button>
-              )}
-
-              <div 
-                className={`group relative w-16 h-16 mb-4 bg-[var(--bg-primary)] rounded-full border-4 border-[var(--bg-primary)] flex items-center justify-center text-3xl shadow-sm cursor-pointer hover:bg-[var(--bg-secondary)] transition-all z-20 duration-300
-                    ${pageCover ? '-mt-16' : 'mt-4'}
-                `} 
-                onClick={handleIconClick}
-              >
-                  {pageIcon || "📄"}
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs">Edit</div>
+          <div className="px-8 pt-4 pb-2 relative z-10 group/header bg-[var(--bg-primary-glass)] backdrop-blur-xl border-b border-[var(--border-primary)]/10">
+              <div className="flex items-center gap-4 mb-2">
+                  {onBackToShelf && (
+                      <button onClick={onBackToShelf} className="p-2 rounded-xl bg-[var(--bg-secondary)]/50 text-[var(--text-secondary)] hover:text-[var(--accent)] hover:bg-[var(--bg-primary)] transition-all flex-shrink-0 shadow-sm border border-[var(--border-primary)]/20" title="Back to Shelf"><ChevronLeftIcon className="w-6 h-6" /></button>
+                  )}
+                  <div className={`group relative w-14 h-14 bg-[var(--bg-primary)] rounded-xl border-2 border-[var(--border-primary)]/30 flex items-center justify-center text-2xl shadow-xl cursor-pointer hover:bg-[var(--bg-secondary)] transition-all z-20 duration-300 ${pageCover ? '-mt-12' : 'mt-0'}`}>{pageIcon || "📄"}</div>
               </div>
-              <input 
-                type="text" 
-                value={pageTitle || ""} 
-                onChange={(e) => onTitleChange(e.target.value)}
-                className="text-4xl font-bold bg-transparent outline-none placeholder-[var(--text-secondary)] w-full relative z-10 mb-2"
-                placeholder="Untitled Page"
-              />
-
-              {/* Tag Bar */}
-              <div className="flex flex-wrap items-center gap-2 mb-4 relative z-20 min-h-[28px]">
-                  <TagIcon className="w-4 h-4 text-[var(--text-secondary)] mr-1" />
-                  {pageTags.map(tag => (
-                      <span 
-                          key={tag} 
-                          className="group arrow-tag inline-flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-all hover:shadow-md cursor-default select-none border-l border-t border-b border-white/20"
-                          style={{ 
-                              backgroundColor: stringToColor(tag),
-                              color: stringToTextColor(tag)
-                          }}
-                      >
-                          {tag}
-                          <button 
-                              onClick={() => handleRemoveTag(tag)} 
-                              className="w-3.5 h-3.5 flex items-center justify-center rounded-full bg-black/10 hover:bg-black/20 text-current transition-colors opacity-60 group-hover:opacity-100"
+              <div className="flex items-center gap-4 relative z-10 w-full mb-1">
+                  <input type="text" value={pageTitle || ""} onChange={(e) => onTitleChange(e.target.value)} className="text-4xl font-black bg-transparent outline-none placeholder-[var(--text-secondary)]/20 flex-grow text-[var(--text-primary)] tracking-tighter italic uppercase drop-shadow-sm" placeholder="PROTOCOL INDEX"/>
+                  <button onClick={() => setShowMindMap(true)} className="flex items-center gap-2 px-5 py-2 rounded-xl bg-indigo-500/10 text-indigo-600 border border-indigo-200 hover:bg-indigo-600 hover:text-white transition-all duration-300 btn-press group shadow-sm"><CubeIcon className="w-4 h-4 group-hover:rotate-12 transition-transform" /><span className="text-[10px] font-black uppercase tracking-widest">Mind Map</span></button>
+              </div>
+              <div className="flex items-center gap-1.5 pb-2 relative z-10">
+                  <EditorToolbar />
+                  <div className="w-px h-5 bg-[var(--border-primary)]/20 mx-1"></div>
+                  <div className="relative">
+                      <button ref={settingsBtnRef} onClick={() => setShowEditorSettings(!showEditorSettings)} className={`p-1.5 rounded-full transition-all ${showEditorSettings ? 'bg-[var(--accent)] text-white shadow-lg rotate-90' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'}`}><CogIcon className="w-4 h-4" /></button>
+                      {showEditorSettings && createPortal(
+                          <div 
+                            className="fixed z-[100] bg-[var(--bg-secondary)]/95 backdrop-blur-xl border border-[var(--border-primary)] rounded-2xl shadow-2xl p-2 w-56 flex flex-col gap-1 animate-[popIn_0.2s_ease-out]"
+                            style={{ 
+                                top: settingsBtnRef.current ? settingsBtnRef.current.getBoundingClientRect().bottom + 8 : 0, 
+                                left: settingsBtnRef.current ? settingsBtnRef.current.getBoundingClientRect().left : 0 
+                            }}
                           >
-                              <CloseIcon className="w-2.5 h-2.5" />
-                          </button>
-                      </span>
-                  ))}
-                  
-                  <div className="relative" ref={dropdownRef}>
-                      <input
-                          type="text"
-                          value={tagInput}
-                          onChange={(e) => {
-                              setTagInput(e.target.value);
-                              setShowTagDropdown(true);
-                          }}
-                          onFocus={() => setShowTagDropdown(true)}
-                          onKeyDown={handleTagInputKeyDown}
-                          placeholder="Add tag..."
-                          className="bg-transparent border-none outline-none text-xs min-w-[80px] text-[var(--text-secondary)] focus:text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/50 py-1"
-                      />
-                      {showTagDropdown && filteredTags.length > 0 && (
-                          <div className="absolute top-full left-0 mt-2 w-56 bg-[var(--bg-secondary)]/95 backdrop-blur-md border border-[var(--border-primary)] rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto animated-popover">
-                              {filteredTags.map(tag => (
-                                  <button
-                                      key={tag}
-                                      onClick={() => handleAddTag(tag)}
-                                      className="w-full text-left px-4 py-2 text-xs hover:bg-[var(--accent)] hover:text-white text-[var(--text-primary)] transition-colors flex items-center justify-between group"
-                                  >
-                                      <span>{tag}</span>
-                                      <span className="opacity-0 group-hover:opacity-100 text-[10px]">+</span>
-                                  </button>
-                              ))}
-                          </div>
+                               <button onClick={handleTogglePen} className="flex items-center justify-between px-3 py-2 text-xs font-bold rounded-xl hover:bg-[var(--bg-primary)] transition-colors group">
+                                   <div className="flex items-center gap-3">
+                                       <div className={`p-1.5 rounded-lg border transition-colors ${showPenAnimation ? 'bg-amber-100 border-amber-300 text-amber-600' : 'bg-slate-100 border-slate-300 text-slate-500'}`}><PencilIcon className="w-3.5 h-3.5" /></div>
+                                       <span>Pen Animation</span>
+                                   </div>
+                                   <div className={`w-3.5 h-3.5 rounded-full border-2 ${showPenAnimation ? 'bg-emerald-500 border-emerald-600' : 'bg-transparent border-slate-300'}`} />
+                               </button>
+                               <button onClick={() => setShowMargin(!showMargin)} className="flex items-center justify-between px-3 py-2 text-xs font-bold rounded-xl hover:bg-[var(--bg-primary)] transition-colors group">
+                                   <div className="flex items-center gap-3">
+                                       <div className={`p-1.5 rounded-lg border transition-colors ${showMargin ? 'bg-indigo-100 border-indigo-300 text-indigo-600' : 'bg-slate-100 border-slate-300 text-slate-500'}`}><ArrowsPointingOutIcon className="w-3.5 h-3.5" /></div>
+                                       <span>Show Margin</span>
+                                   </div>
+                                   <div className={`w-3.5 h-3.5 rounded-full border-2 ${showMargin ? 'bg-emerald-500 border-emerald-600' : 'bg-transparent border-slate-300'}`} />
+                               </button>
+                               <button onClick={() => setSpellCheck(!spellCheck)} className="flex items-center justify-between px-3 py-2 text-xs font-bold rounded-xl hover:bg-[var(--bg-primary)] transition-colors group">
+                                   <div className="flex items-center gap-3">
+                                       <div className={`p-1.5 rounded-lg border transition-colors ${spellCheck ? 'bg-emerald-100 border-emerald-300 text-emerald-600' : 'bg-slate-100 border-slate-300 text-slate-500'}`}><CheckIcon className="w-3.5 h-3.5" /></div>
+                                       <span>Spell Check</span>
+                                   </div>
+                                   <div className={`w-3.5 h-3.5 rounded-full border-2 ${spellCheck ? 'bg-emerald-500 border-emerald-600' : 'bg-transparent border-slate-300'}`} />
+                               </button>
+                               <div className="h-px bg-[var(--border-primary)]/50 my-1" />
+                               <div className="px-3 py-2">
+                                   <p className="text-[9px] font-black uppercase text-[var(--text-secondary)] opacity-50 tracking-widest">Protocol Version v2.1</p>
+                               </div>
+                          </div>,
+                          document.body
                       )}
                   </div>
-              </div>
-              
-              {/* Editor Toolbar with Arrows */}
-              <div className="flex items-center gap-2 mt-2 pb-2 border-b border-[var(--border-primary)]">
-                  <button onClick={() => scrollToolbar('left')} className="p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] rounded-full transition-colors flex-shrink-0" title="Scroll Left">
-                      <ChevronLeftIcon className="w-3 h-3" />
-                  </button>
-                  
-                  <div 
-                      ref={toolbarContainerRef}
-                      className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth flex-grow mask-fade-sides"
-                      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                  >
-                      <EditorToolbar />
-                  </div>
-
-                  <button onClick={() => scrollToolbar('right')} className="p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] rounded-full transition-colors flex-shrink-0" title="Scroll Right">
-                      <ChevronRightIcon className="w-3 h-3" />
-                  </button>
+                  {isDictating && (
+                      <div className="flex items-center gap-2 ml-auto animate-pulse text-rose-500 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
+                          <MicrophoneIcon className="w-4 h-4" /><span className="text-[10px] font-black uppercase tracking-widest">Recording Speech...</span>
+                          <button onClick={() => { recognitionRef.current?.stop(); setIsDictating(false); }} className="ml-1 p-0.5 hover:bg-rose-500/20 rounded-full"><CloseIcon className="w-3 h-3" /></button>
+                      </div>
+                  )}
               </div>
           </div>
       </div>
 
-      {/* Content Area */}
-      <div className="flex-grow flex flex-col overflow-hidden relative z-0">
+      <div className="flex-grow flex flex-col overflow-hidden relative z-0 bg-transparent">
+          {summaryContent && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center p-8 bg-[var(--bg-primary)]/10 pointer-events-none">
+                  <div className="pointer-events-auto w-full max-w-2xl h-fit">
+                    <SummaryView summaryContent={summaryContent} onClose={onCloseSummary} onAppend={onAppendSummary} />
+                  </div>
+              </div>
+          )}
           <div 
-            className="flex-grow overflow-y-auto outline-none text-lg leading-relaxed custom-scrollbar markdown-body notebook-textarea pb-24"
+            className={`flex-grow overflow-y-auto outline-none custom-scrollbar notebook-textarea pb-32 ${showMargin ? '' : 'no-margin'}`}
             ref={contentEditableRef}
             contentEditable
             onInput={handleInput}
-            onKeyDown={handleKeyDown}
+            onBlur={() => onNotesChange(contentEditableRef.current?.innerHTML || "")}
             suppressContentEditableWarning
-            data-placeholder="Type '/' for commands..."
+            data-placeholder="Type '/' for component index..."
+            spellCheck={spellCheck}
           />
-          
-          {/* Floating Tasks Icon */}
-          <button 
-            onClick={() => setIsTodoListOpen(!isTodoListOpen)}
-            className={`absolute top-4 right-8 p-2 rounded-full shadow-lg z-30 transition-all btn-press ${isTodoListOpen ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--border-primary)] hover:text-[var(--text-primary)]'}`}
-            title="Tasks"
-          >
-            <ClipboardIcon className="w-5 h-5" />
-          </button>
-
-          {/* Floating Task List */}
-          {pageTodos && isTodoListOpen && (
-              <div className="absolute top-16 right-8 w-72 h-96 bg-[var(--bg-secondary)] border border-[var(--border-primary)] shadow-xl rounded-lg z-30 overflow-hidden flex flex-col animated-popover">
-                  <ToDoList 
-                    todos={pageTodos} 
-                    onChange={onTodosChange} 
-                    isWidget={true} 
-                    onCollapse={() => setIsTodoListOpen(false)}
-                  />
-              </div>
-          )}
-          
-          {/* Floating AI Actions Menu (Bottom Center) */}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col-reverse items-center gap-4 pointer-events-none">
-              {/* Main Trigger Button - Pointer events enabled */}
-              <button 
-                  onClick={() => setShowAiActions(!showAiActions)}
-                  className={`pointer-events-auto w-12 h-12 rounded-full bg-[var(--accent)] text-white shadow-lg flex items-center justify-center hover:scale-110 transition-all duration-300 hover:shadow-xl btn-press z-50 
-                    ${showAiActions ? 'rotate-45' : ''}
-                    ${isSpeechListening ? 'ring-4 ring-[var(--accent)]/30 animate-pulse' : ''}
-                  `}
-                  title="AI Actions"
-              >
-                  <SparklesIcon className="w-6 h-6" />
-              </button>
-
-              {/* Pop-up Options Container - Pointer events enabled when open */}
-              <div className={`flex flex-col gap-3 pointer-events-auto transition-all duration-300 ease-out origin-bottom items-center ${showAiActions ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-8 scale-90 pointer-events-none'}`}>
-                  
-                  <div className="flex gap-2">
-                        <button 
-                            onClick={() => { toggleSpeech(); setShowAiActions(false); }}
-                            className={`flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-full transition-all btn-press shadow-lg border border-white/20
-                                ${isSpeechListening 
-                                    ? 'bg-[var(--danger)] text-white animate-pulse' 
-                                    : 'bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:opacity-90'
-                                }
-                            `}
-                        >
-                            <MicrophoneIcon className="w-3 h-3" />
-                            <span>{isSpeechListening ? 'Listening...' : 'Dictate'}</span>
-                        </button>
-                  </div>
-
-                  <div className="flex gap-2">
-                      <button 
-                          onClick={() => { onSummarize(); setShowAiActions(false); }} 
-                          disabled={isSummarizing}
-                          className="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-full transition-all btn-press btn-gold-gradient shadow-lg min-w-[120px] justify-center"
-                      >
-                          <span className="relative z-10 flex items-center gap-1">
-                            {isSummarizing ? <Spinner className="w-3 h-3 text-white" /> : <SparklesIcon className="w-3 h-3 text-white" />}
-                            <span>AI Summary</span>
-                          </span>
-                      </button>
-                      
-                      <button 
-                          onClick={() => { onStartRecall(); setShowAiActions(false); }}
-                          disabled={isGeneratingQuiz}
-                          className="flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-full transition-all btn-press btn-emerald-gradient shadow-lg min-w-[120px] justify-center"
-                      >
-                          <span className="relative z-10 flex items-center gap-1">
-                            {isGeneratingQuiz ? <Spinner className="w-3 h-3 text-white" /> : <LightBulbIcon className="w-3 h-3 text-white" />}
-                            <span>Active Recall</span>
-                          </span>
-                      </button>
-                  </div>
+              <button onClick={() => setShowAiActions(!showAiActions)} className={`pointer-events-auto w-12 h-12 rounded-full bg-[var(--accent)] text-white shadow-2xl flex items-center justify-center hover:scale-110 transition-all duration-300 hover:shadow-[var(--accent)]/30 btn-press z-50 ${showAiActions ? 'rotate-45' : ''}`}><SparklesIcon className="w-6 h-6" /></button>
+              <div className={`flex flex-col gap-2 pointer-events-auto transition-all duration-300 ease-out origin-bottom items-center ${showAiActions ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-8 scale-90 pointer-events-none'}`}>
+                  <button onClick={startDictation} className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl transition-all btn-press bg-rose-50 text-rose-500 border border-rose-200 hover:bg-rose-500 hover:text-white shadow-xl">
+                      <MicrophoneIcon className="w-4 h-4" /><span>{isDictating ? 'Stop Dictation' : 'Start Dictation'}</span>
+                  </button>
+                  <button onClick={() => { onSummarize(); setShowAiActions(false); }} className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl transition-all btn-press bg-[var(--bg-primary-glass)] text-[var(--text-primary)] border border-[var(--border-primary)]/50 hover:bg-[var(--bg-primary)] shadow-xl backdrop-blur-xl"><span>Summarize</span></button>
+                  <button onClick={() => { onStartRecall(); setShowAiActions(false); }} className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl transition-all btn-press bg-[var(--accent)] text-white border border-white/10 hover:opacity-90 shadow-xl shadow-[var(--accent)]/20"><span>Active Recall</span></button>
               </div>
           </div>
       </div>
-
-      {slashMenuPosition && (
-          <SlashMenu 
-            position={slashMenuPosition} 
-            onSelect={executeCommand} 
-            onClose={() => setSlashMenuPosition(null)} 
-          />
-      )}
-
-      {iconPickerPos && (
-          <IconPicker 
-              position={iconPickerPos}
-              onClose={() => setIconPickerPos(null)}
-              onSelect={(icon) => onIconChange(icon)}
-          />
-      )}
+      {showMindMap && <MindMap onClose={() => setShowMindMap(false)} />}
     </div>
   );
 });

@@ -1,26 +1,33 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { flushSync } from 'react-dom';
-import { InfinityIcon, ThemeIcon, FocusIcon, QuestionMarkCircleIcon, DocumentTextIcon, LogoutIcon, ChevronDownIcon, ArrowsRightLeftIcon, Squares2X2Icon, HomeIcon } from './components/Icons';
+import { ThemeIcon, FocusIcon, DocumentTextIcon, LogoutIcon, ChevronDownIcon, ArrowsRightLeftIcon, Squares2X2Icon, HomeIcon, LibraryIcon, EyeSlashIcon, EyeIcon, LightBulbIcon, SparklesIcon, HotDogMenuIcon, PlusIcon, CheckIcon, PencilIcon, WifiIcon, SignalSlashIcon, ChevronLeftIcon, SwatchIcon, ImageIcon, NoSymbolIcon, TrashIcon, LayoutDashboardIcon, CogIcon } from './components/Icons';
 import Notebook from './components/Notebook';
 import MediaPanel from './components/MediaPanel';
-import { generateHighlightedSummary, generateQuizFromNotes, lookupDictionary } from './lib/ai';
-import BrightnessSlider from './components/BrightnessSlider';
-import Modal from './components/Modal';
-import QuizView, { Question } from './components/QuizView';
+import NotebookShelf from './components/NotebookShelf';
+import { generateHighlightedSummary, generateQuizFromNotes } from './lib/ai';
 import SummaryView from './components/SummaryView';
 import Clock from './components/Clock';
 import Sidebar from './components/Sidebar';
-import { generateThemeFromImage, DynamicTheme } from './lib/colorExtractor';
-import ShortcutHelp from './components/ShortcutHelp';
 import PdfViewer, { PdfFile } from './components/PdfViewer';
 import SettingsModal from './components/SettingsModal';
-import { User, Theme, WidgetType, WidgetState, ToDoItem, NotePage } from './types';
+import { User, Theme, WidgetType, WidgetState, ToDoItem, NotePage, FloatingWidget } from './types';
 import { GlobalBackgroundAnimation } from './components/GlobalBackgroundAnimation';
+import QuizView, { Question } from './components/QuizView';
+import ContextMenu, { ContextMenuItem } from './components/ContextMenu';
+import Dashboard from './components/Dashboard';
 
 const PAGES_STORAGE_KEY_BASE = 'zen-notes-pages-v2';
-const WALLPAPER_STORAGE_KEY_BASE = 'zen-notes-wallpaper';
-const PDF_LIBRARY_STORAGE_KEY_BASE = 'zen-notes-pdf-library';
+const WALLPAPER_STORAGE_KEY = 'infi-notes-global-wallpaper';
+
+const THEME_PALETTES: Record<Theme, string[]> = {
+    'light': ['#ffffff', '#f1f5f9', '#2563eb', '#020617'],
+    'paper': ['#fcfaf2', '#f0ede1', '#2c3e50', '#1a1a1a'],
+    'pitch-black': ['#000000', '#1a1a1a', '#00BFFF', '#f0f0f0'],
+    'matrix': ['#000500', '#001a00', '#22c55e', '#4ade80'],
+    'cyberpunk': ['#050505', '#0f0f13', '#ffee00', '#00f3ff'],
+    'monokai': ['#272822', '#3E3D32', '#FF6188', '#F8F8F2'],
+    'frosty': ['#f0f9ff', '#e0f2fe', '#38bdf8', '#0284c7'],
+};
 
 function stripHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -28,771 +35,454 @@ function stripHtml(html: string): string {
 }
 
 interface AppProps {
+  // Added key property to satisfy stricter type checks in some environments
+  key?: React.Key;
   user: User;
   onLogout: () => void;
   theme: Theme;
   setTheme: (theme: Theme) => void;
   onOpenWidgets: () => void;
+  onOpenJournal: () => void;
   onGoHome: () => void;
   onUpdateUser: (user: User) => void;
+  initialShowDashboard?: boolean;
+  layoutMode: 'modern' | 'classic';
+  onLayoutChange: (mode: 'modern' | 'classic') => void;
 }
 
-function App({ user, onLogout, theme, setTheme, onOpenWidgets, onGoHome, onUpdateUser }: AppProps) {
+function App({ user, onLogout, theme, setTheme, onOpenWidgets, onOpenJournal, onGoHome, onUpdateUser, initialShowDashboard = true, layoutMode, onLayoutChange }: AppProps) {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryContent, setSummaryContent] = useState<string | null>(null);
-
   const [videoUrl, setVideoUrl] = useState('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
   const [videoId, setVideoId] = useState<string | null>('dQw4w9WgXcQ');
-
   const [brightness, setBrightness] = useState(100);
-  const [showBrightnessSlider, setShowBrightnessSlider] = useState(false);
-  
   const [widgets, setWidgets] = useState<WidgetState[]>([
-    { type: 'empty', isBgToggled: false },
-    { type: 'empty', isBgToggled: false },
-    { type: 'empty', isBgToggled: false },
+    { type: 'empty' }, { type: 'empty' }, { type: 'empty' },
   ]);
-
+  const [floatingWidgets, setFloatingWidgets] = useState<FloatingWidget[]>([]);
   const [activeWidgetIndex, setActiveWidgetIndex] = useState<number | null>(null);
-
-  // Active Recall State
-  const [showRecallPrompt, setShowRecallPrompt] = useState(false);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<Question[] | null>(null);
-  const [quizError, setQuizError] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  
-  // Notebook/Sidebar State
   const [pages, setPages] = useState<NotePage[]>([]);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [backgroundAnimation, setBackgroundAnimation] = useState<string>('none');
-  const notebookEditorRef = useRef<HTMLDivElement>(null);
-  
-  // Tagging System State
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-
-  // Wallpaper state
-  const [wallpaperUrl, setWallpaperUrl] = useState<string | null>(null);
-  const [dynamicTheme, setDynamicTheme] = useState<DynamicTheme | null>(null);
-  const wallpaperInputRef = useRef<HTMLInputElement>(null);
-
-  // UI Animation State
-  const [themeNameToast, setThemeNameToast] = useState<string | null>(null);
-  const [isThemeChanging, setIsThemeChanging] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
-
-  // Theme Menu State
-  const [showThemeMenu, setShowThemeMenu] = useState(false);
-  const themeMenuRef = useRef<HTMLDivElement>(null);
-
-  // Zen Mode
   const [isZenMode, setIsZenMode] = useState(false);
-  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-
-  // Global state
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
-  const [isLayoutSwapped, setIsLayoutSwapped] = useState(false);
-  const [isSwapping, setIsSwapping] = useState(false);
-
-  // PDF Library State (Lifted)
+  
+  // Section Visibility States
+  const [notebookVisible, setNotebookVisible] = useState(true);
+  const [videoVisible, setVideoVisible] = useState(true);
+  const [widgetsVisible, setWidgetsVisible] = useState(true);
+  
+  // Added missing isHoveringWidget state required by MediaPanel and section styling
+  const [isHoveringWidget, setIsHoveringWidget] = useState(false);
+  
   const [pdfLibrary, setPdfLibrary] = useState<PdfFile[]>([]);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [wallpaperUrl, setWallpaperUrl] = useState<string | null>(() => localStorage.getItem(WALLPAPER_STORAGE_KEY));
+  const [hideHeader, setHideHeader] = useState(() => localStorage.getItem('infi-hide-header') === 'true');
+  
+  const [animStage, setAnimStage] = useState(0);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  
+  // Sync dashboard state with prop to handle landing page navigation correctly
+  const [showDashboard, setShowDashboard] = useState(initialShowDashboard);
 
+  useEffect(() => {
+    setShowDashboard(initialShowDashboard);
+  }, [initialShowDashboard]);
+
+  const wallpaperInputRef = useRef<HTMLInputElement>(null);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
   const activePage = pages.find(p => p.id === activePageId);
   const notes = activePage ? activePage.content : '';
-
-  // User-specific storage keys
   const PAGES_STORAGE_KEY = `${PAGES_STORAGE_KEY_BASE}-${user.id}`;
-  const WALLPAPER_STORAGE_KEY = `${WALLPAPER_STORAGE_KEY_BASE}-${user.id}`;
-  const PDF_LIBRARY_STORAGE_KEY = `${PDF_LIBRARY_STORAGE_KEY_BASE}-${user.id}`;
-  
-  // Derived state for tags (Tag -> Count)
-  const allTagsMap = useMemo(() => {
+  const [isShelfVisible, setIsShelfVisible] = useState(true);
+
+  const tagsMap = useMemo(() => {
     const map = new Map<string, number>();
-    pages.forEach(p => {
-        if (p.tags && Array.isArray(p.tags)) {
-            p.tags.forEach(t => {
-                map.set(t, (map.get(t) || 0) + 1);
-            });
-        }
-    });
+    pages.forEach(p => p.tags?.forEach(t => map.set(t, (map.get(t) || 0) + 1)));
     return map;
   }, [pages]);
-  
-  const filteredPages = useMemo(() => {
-      if (!selectedTag) return pages;
-      return pages.filter(p => p.tags && p.tags.includes(selectedTag));
-  }, [pages, selectedTag]);
 
+  const allTodos = useMemo(() => {
+      return pages.flatMap(p => p.todos || []);
+  }, [pages]);
 
-  // Click Sound Effect
+  // Restore Background Animations based on Theme
   useEffect(() => {
-    // Using a cleaner, standard UI click sound (Pop)
-    const CLICK_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
-    const audio = new Audio(CLICK_SOUND_URL);
-    audio.volume = 0.3; 
+    if (theme === 'matrix') setBackgroundAnimation('matrixRain');
+    else if (theme === 'cyberpunk') setBackgroundAnimation('gridStrobe');
+    else if (theme === 'monokai') setBackgroundAnimation('floatingTiles');
+    else if (theme === 'frosty') setBackgroundAnimation('fallingLeaves');
+    else if (theme === 'pitch-black') setBackgroundAnimation('pulsingDots');
+    else setBackgroundAnimation('none');
+  }, [theme]);
 
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      // Only play sound if clicking an interactive element
-      const interactiveElement = target.closest('button, a, input[type="button"], input[type="submit"], input[type="checkbox"], input[type="radio"], select, [role="button"], .btn-press, .cursor-pointer');
-      
-      if (interactiveElement) {
-          const clickSound = audio.cloneNode() as HTMLAudioElement;
-          clickSound.volume = 0.3;
-          clickSound.play().catch(() => {
-              // Ignore auto-play restrictions that might occur before first interaction
-          });
-      }
-    };
-
-    document.addEventListener('click', handleClick);
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
     return () => {
-      document.removeEventListener('click', handleClick);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
-  
-  // Wallpaper effect
+
   useEffect(() => {
-    const savedWallpaper = localStorage.getItem(WALLPAPER_STORAGE_KEY);
-    if (savedWallpaper) {
-        setWallpaperUrl(savedWallpaper);
-        generateThemeFromImage(savedWallpaper).then(theme => {
-            setDynamicTheme(theme);
-        });
-    }
-  }, [WALLPAPER_STORAGE_KEY]);
+      const t1 = setTimeout(() => setAnimStage(1), 100);
+      const t2 = setTimeout(() => setAnimStage(2), 600);
+      const t3 = setTimeout(() => setAnimStage(3), 1200);
+      const t4 = setTimeout(() => setAnimStage(4), 2200);
+      const t5 = setTimeout(() => setAnimStage(5), 3000); 
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); };
+  }, []);
 
   useEffect(() => {
     if (wallpaperUrl) {
-      document.documentElement.classList.add('has-wallpaper');
-      localStorage.setItem(WALLPAPER_STORAGE_KEY, wallpaperUrl);
+        localStorage.setItem(WALLPAPER_STORAGE_KEY, wallpaperUrl);
+        document.documentElement.classList.add('has-wallpaper');
     } else {
-      document.documentElement.classList.remove('has-wallpaper');
-      localStorage.removeItem(WALLPAPER_STORAGE_KEY);
+        localStorage.removeItem(WALLPAPER_STORAGE_KEY);
+        document.documentElement.classList.remove('has-wallpaper');
     }
-  }, [wallpaperUrl, WALLPAPER_STORAGE_KEY]);
+  }, [wallpaperUrl]);
 
-  // Dynamic theme injection effect
   useEffect(() => {
-    const styleElement = document.getElementById('dynamic-theme-style');
-    if (dynamicTheme) {
-        let cssText = ':root.has-wallpaper {';
-        for (const [key, value] of Object.entries(dynamicTheme)) {
-            cssText += `${key}: ${value};`;
-        }
-        cssText += '}';
-        
-        const bgPrimary = dynamicTheme['--bg-primary'].replace('rgb(', '').replace(')', '');
-        const bgSecondary = dynamicTheme['--bg-secondary'].replace('rgba(', '').replace(')', '').split(',').slice(0, 3).join(',');
+      localStorage.setItem('infi-hide-header', String(hideHeader));
+  }, [hideHeader]);
 
-        cssText += `
-            html.has-wallpaper.dynamic-theme {
-                --bg-primary-glass: rgba(${bgPrimary}, 0.5);
-                --bg-secondary-glass: rgba(${bgSecondary}, 0.5);
-            }
-        `;
-
-        if (styleElement) {
-            styleElement.innerHTML = cssText;
-        } else {
-            const newStyleElement = document.createElement('style');
-            newStyleElement.id = 'dynamic-theme-style';
-            newStyleElement.innerHTML = cssText;
-            document.head.appendChild(newStyleElement);
+  useEffect(() => {
+    const savedPages = localStorage.getItem(PAGES_STORAGE_KEY);
+    if (savedPages) {
+        const parsed = JSON.parse(savedPages);
+        setPages(parsed);
+        if (parsed.length > 0 && !activePageId) {
+            setActivePageId(parsed[0].id);
         }
-        document.documentElement.classList.add('dynamic-theme');
     } else {
-        if (styleElement) {
-            styleElement.innerHTML = '';
-        }
-        document.documentElement.classList.remove('dynamic-theme');
-    }
-  }, [dynamicTheme]);
-
-
-  // Load pages from local storage on initial render
-  useEffect(() => {
-    try {
-      const savedPages = localStorage.getItem(PAGES_STORAGE_KEY);
-      if (savedPages) {
-        let parsedPages: NotePage[] = JSON.parse(savedPages);
-        if (parsedPages.length > 0) {
-            setPages(parsedPages);
-            const firstTopLevelPage = parsedPages.find((p: NotePage) => p.parentId === null) || parsedPages[0];
-            if (!activePageId) setActivePageId(firstTopLevelPage.id);
-        } else {
-            handleAddNewPage();
-        }
-      } else {
         handleAddNewPage();
-      }
-    } catch (error) {
-      console.error("Failed to load notes from local storage:", error);
-      handleAddNewPage();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [PAGES_STORAGE_KEY]);
 
-  // Save pages to local storage whenever they change
+  useEffect(() => { localStorage.setItem(PAGES_STORAGE_KEY, JSON.stringify(pages)); }, [pages, PAGES_STORAGE_KEY]);
+
   useEffect(() => {
-    try {
-      localStorage.setItem(PAGES_STORAGE_KEY, JSON.stringify(pages));
-    } catch (error) {
-      console.error("Failed to save notes to local storage:", error);
-    }
-  }, [pages, PAGES_STORAGE_KEY]);
+    const handleClickOutside = (event: MouseEvent) => {
+        if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
+            setShowThemeMenu(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-  // Load PDF Library
-  useEffect(() => {
-      try {
-          const savedLibrary = localStorage.getItem(PDF_LIBRARY_STORAGE_KEY);
-          if (savedLibrary) {
-              setPdfLibrary(JSON.parse(savedLibrary));
-          }
-      } catch (error) {
-          console.error("Failed to load PDF library:", error);
-      }
-  }, [PDF_LIBRARY_STORAGE_KEY]);
-
-  // Save PDF Library
-  useEffect(() => {
-      try {
-          localStorage.setItem(PDF_LIBRARY_STORAGE_KEY, JSON.stringify(pdfLibrary));
-      } catch (error) {
-          console.error("Failed to save PDF library:", error);
-      }
-  }, [pdfLibrary, PDF_LIBRARY_STORAGE_KEY]);
-
-  const selectTheme = (newTheme: Theme) => {
-    setIsThemeChanging(true);
-    setTheme(newTheme);
-    setShowThemeMenu(false);
-    
-    if (newTheme === 'matrix') {
-        setBackgroundAnimation('matrixRain');
-    } else if (newTheme === 'frosty') {
-        setBackgroundAnimation('fallingLeaves');
-    } else if (newTheme === 'cyberpunk') {
-        setBackgroundAnimation('gridStrobe');
-    } else {
-        setBackgroundAnimation('none'); 
-    }
-    
-    const displayName = newTheme.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
-    setThemeNameToast(displayName);
-
-    setTimeout(() => {
-        setThemeNameToast(null);
-        setIsThemeChanging(false);
-    }, 1500);
-  };
-  
-  const handleSummarize = async () => {
-    const plainTextNotes = stripHtml(notes);
-    if (!plainTextNotes.trim()) {
-        setErrorMessage("Your notebook is empty. Please write some notes before generating a summary.");
-        return;
-    }
-    setIsSummarizing(true);
-    setSummaryContent(null);
-    try {
-        const summary = await generateHighlightedSummary(plainTextNotes);
-        setSummaryContent(summary);
-    } catch (error) {
-        console.error("Summarization failed:", error);
-        setErrorMessage("Failed to generate summary. Please try again later.");
-    } finally {
-        setIsSummarizing(false);
-    }
-  };
-
-  const handleAppendSummary = (plainTextSummary: string) => {
-    const summaryHtml = `<hr><p><b>Summary</b></p><p>${plainTextSummary.replace(/\n/g, '<br>')}</p>`;
-    handleNotesChange(notes + summaryHtml);
-    setSummaryContent(null);
-  };
-  
-  const handleStartRecall = async () => {
-    setShowRecallPrompt(false);
-    const plainTextNotes = stripHtml(notes);
-    if (!plainTextNotes.trim()) {
-        setQuizError("There are no notes to generate a quiz from.");
-        return;
-    }
-    setIsGeneratingQuiz(true);
-    setQuizError(null);
-    try {
-      const questions = await generateQuizFromNotes(plainTextNotes);
-      if (questions.length === 0) {
-        throw new Error("Could not generate any questions from the notes.");
-      }
-      setQuizQuestions(questions);
-    } catch(error) {
-      console.error("Quiz generation failed:", error);
-      setQuizError(error instanceof Error ? error.message : "An unknown error occurred.");
-    } finally {
-      setIsGeneratingQuiz(false);
-    }
-  };
-  
-  const handleNotesChange = (newContent: string) => {
-    if (!activePageId) return;
-    setPages(currentPages =>
-        currentPages.map(p =>
-            p.id === activePageId ? { ...p, content: newContent } : p
-        )
-    );
-  };
-
-  const handleTodosChange = (newTodos: ToDoItem[]) => {
-    if (!activePageId) return;
-    setPages(currentPages =>
-        currentPages.map(p =>
-            p.id === activePageId ? { ...p, todos: newTodos } : p
-        )
-    );
-  };
-
-  const handlePageMetaChange = (meta: { title?: string, icon?: string, coverImage?: string, tags?: string[] }) => {
-    if (!activePageId) return;
-    setPages(currentPages =>
-        currentPages.map(p =>
-            p.id === activePageId ? { ...p, ...meta } : p
-        )
-    );
-  };
-
-  const handleAddNewPage = (parentId: string | null = null, isFolder: boolean = false, title?: string) => {
+  const handleAddNewPage = (parentId: string | null = null, isFolder = false) => {
     const newPage: NotePage = {
         id: Date.now().toString(),
-        title: title || (isFolder ? 'New Folder' : 'Untitled Page'),
+        title: isFolder ? 'New Folder' : 'Untitled Note',
         content: '<p><br></p>',
-        parentId: parentId,
-        order: pages.filter(p => p.parentId === parentId).length,
-        todos: [],
-        isFolder: isFolder,
-        icon: isFolder ? '📁' : '📄',
-        tags: []
+        parentId, order: pages.length, todos: [], isFolder, icon: isFolder ? '📁' : '📄', tags: []
     };
-    setPages(currentPages => [...currentPages, newPage]);
-    setActivePageId(newPage.id);
-    if (isSidebarOpen && window.innerWidth < 1024) setIsSidebarOpen(false); 
-  };
-
-  const handleDeletePage = (pageIdToDelete: string) => {
-    setPages(currentPages => {
-        const pagesToDelete = new Set<string>();
-        const queue = [pageIdToDelete];
-        pagesToDelete.add(pageIdToDelete);
-
-        while (queue.length > 0) {
-            const currentId = queue.shift()!;
-            const children = currentPages.filter(p => p.parentId === currentId);
-            for (const child of children) {
-                pagesToDelete.add(child.id);
-                queue.push(child.id);
-            }
-        }
-
-        const newPages = currentPages.filter(p => !pagesToDelete.has(p.id));
-
-        if (pagesToDelete.has(activePageId!)) {
-            const deletedPage = currentPages.find(p => p.id === pageIdToDelete);
-            const parentId = deletedPage?.parentId;
-            const sibling = newPages.find(p => p.parentId === parentId);
-            const parent = newPages.find(p => p.id === parentId);
-            const fallback = newPages.length > 0 ? newPages[0].id : null;
-            setActivePageId(sibling?.id || parent?.id || fallback);
-        }
-
-        return newPages;
-    });
-  };
-
-  const handleRenamePage = (id: string, newTitle: string) => {
-      setPages(currentPages => currentPages.map(p => p.id === id ? { ...p, title: newTitle } : p));
-  };
-
-  const handleMovePage = (draggedId: string, targetId: string, position: 'before' | 'after' | 'inside') => {
-    setPages(currentPages => {
-        const draggedPage = currentPages.find(p => p.id === draggedId);
-        const targetPage = currentPages.find(p => p.id === targetId);
-        if (!draggedPage || !targetPage || draggedId === targetId) return currentPages;
-
-        let ancestor = targetPage;
-        while (ancestor.parentId) {
-            if (ancestor.parentId === draggedId) return currentPages;
-            const nextAncestor = currentPages.find(p => p.id === ancestor.parentId);
-            if (!nextAncestor) break;
-            ancestor = nextAncestor;
-        }
-
-        let newPages = currentPages.filter(p => p.id !== draggedId).map(p => ({ ...p }));
-        const targetInNew = newPages.find(p => p.id === targetId);
-        if (!targetInNew) return currentPages;
-
-        const updatedDragged = { ...draggedPage };
-
-        if (position === 'inside') {
-            updatedDragged.parentId = targetInNew.id;
-            const siblings = newPages.filter(p => p.parentId === targetInNew.id);
-            updatedDragged.order = siblings.length;
-        } else {
-            updatedDragged.parentId = targetInNew.parentId;
-            const siblings = newPages.filter(p => p.parentId === targetInNew.parentId);
-            siblings.sort((a, b) => a.order - b.order);
-            const targetIndex = siblings.findIndex(p => p.id === targetId);
-            const insertIndex = position === 'after' ? targetIndex + 1 : targetIndex;
-            siblings.forEach((p, idx) => {
-                if (idx >= insertIndex) p.order += 1;
-            });
-            updatedDragged.order = insertIndex;
-        }
-        newPages.push(updatedDragged);
-        const grouped = new Map<string | null, NotePage[]>();
-        newPages.forEach(p => {
-             const pid = p.parentId || null;
-             if (!grouped.has(pid)) grouped.set(pid, []);
-             grouped.get(pid)!.push(p);
-        });
-        grouped.forEach(group => {
-            group.sort((a, b) => a.order - b.order);
-            group.forEach((p, i) => p.order = i);
-        });
-        return newPages;
-    });
-  };
-
-  const handleCloseQuiz = () => { setQuizQuestions(null); setQuizError(null); }
-  
-  const extractVideoID = (url: string) => {
-      // Improved Regex for YouTube ID extraction (covers youtu.be, embed, v=, etc.)
-      const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-      const match = url.match(regExp);
-      return match ? match[1] : null; 
-  };
-  
-  const handleLoadVideo = () => { setVideoId(extractVideoID(videoUrl)); };
-  const handleWidgetPlaceholderClick = (index: number) => { const newWidgets = [...widgets]; newWidgets[index] = { type: 'selecting', isBgToggled: false }; setWidgets(newWidgets); setActiveWidgetIndex(index); };
-  const selectWidget = (index: number, type: WidgetType) => { if (index !== null) { let initialData: any = {}; if (type === 'terminal') { initialData = { history: ['Welcome to Zen-Terminal.'], cwdId: null, cwdPath: '/', }; } const newWidgets = [...widgets]; newWidgets[index] = { type, data: initialData, isBgToggled: false }; setWidgets(newWidgets); } };
-  const updateWidgetData = (index: number, data: any) => { const newWidgets = [...widgets]; newWidgets[index] = { ...newWidgets[index], data }; setWidgets(newWidgets); };
-  const removeWidget = useCallback((index: number) => { setWidgets(currentWidgets => { const newWidgets = [...currentWidgets]; newWidgets[index] = { type: 'empty', isBgToggled: false }; return newWidgets; }); setActiveWidgetIndex(currentIndex => (currentIndex === index ? null : currentIndex)); }, []);
-  const handleToggleWidgetBg = (index: number) => { setWidgets(currentWidgets => { const newWidgets = [...currentWidgets]; const widget = newWidgets[index]; newWidgets[index] = { ...widget, isBgToggled: !widget.isBgToggled }; return newWidgets; }); };
-  const handleMoveWidget = (fromIndex: number, toIndex: number) => { if (fromIndex === toIndex) return; setWidgets(currentWidgets => { const newWidgets = [...currentWidgets]; const item = newWidgets[fromIndex]; newWidgets.splice(fromIndex, 1); newWidgets.splice(toIndex, 0, item); return newWidgets; }); if (activeWidgetIndex === fromIndex) setActiveWidgetIndex(toIndex); else if (activeWidgetIndex !== null) { if (fromIndex < activeWidgetIndex && toIndex >= activeWidgetIndex) setActiveWidgetIndex(activeWidgetIndex - 1); else if (fromIndex > activeWidgetIndex && toIndex <= activeWidgetIndex) setActiveWidgetIndex(activeWidgetIndex + 1); } };
-  const handleWallpaperChange = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const reader = new FileReader(); reader.onload = async (event) => { const imageUrl = event.target?.result as string; setWallpaperUrl(imageUrl); const theme = await generateThemeFromImage(imageUrl); setDynamicTheme(theme); }; reader.readAsDataURL(file); } };
-  const handleRemoveWallpaper = () => { setWallpaperUrl(null); setDynamicTheme(null); };
-  const handleDefineWord = async (word: string) => { let dictIndex = widgets.findIndex(w => w.type === 'dictionary'); if (dictIndex === -1) { dictIndex = widgets.findIndex(w => w.type === 'empty'); if (dictIndex === -1) dictIndex = 1; selectWidget(dictIndex, 'dictionary'); } setActiveWidgetIndex(dictIndex); updateWidgetData(dictIndex, { word, loading: true, error: null }); try { const result = await lookupDictionary(word); updateWidgetData(dictIndex, { word, result, loading: false }); } catch (error) { updateWidgetData(dictIndex, { word, loading: false, error: "Definition not found." }); } };
-  const handleTerminalCommand = (index: number, command: string, args: string[]) => { /* ... */ };
-
-  const handleSwapLayout = () => {
-    setIsSwapping(true);
-    setTimeout(() => setIsSwapping(false), 500);
-
-    if ('startViewTransition' in document) {
-      (document as any).startViewTransition(() => {
-        flushSync(() => {
-            setIsLayoutSwapped(prev => !prev);
-        });
-      });
-    } else {
-      setIsLayoutSwapped(prev => !prev);
+    setPages(prev => [...prev, newPage]);
+    if (!parentId) {
+        setActivePageId(newPage.id);
+        setIsShelfVisible(false);
+        setShowDashboard(false);
     }
   };
 
+  const handleOpenNotebook = (id: string) => {
+    setActivePageId(id);
+    setIsShelfVisible(false);
+    setShowDashboard(false);
+  };
+
+  const handleSummarize = async () => {
+    if (!isOnline) return;
+    const text = stripHtml(notes);
+    if (!text.trim()) return;
+    setIsSummarizing(true);
+    try {
+        const res = await generateHighlightedSummary(text);
+        setSummaryContent(res);
+    } catch (e) { console.error(e); } finally { setIsSummarizing(false); }
+  };
+
+  const handleStartRecall = async () => {
+    if (!isOnline) return;
+    const text = stripHtml(notes);
+    if (!text || text.trim().length < 10) return;
+    setIsGeneratingQuiz(true);
+    try {
+        const res = await generateQuizFromNotes(text);
+        if (res && res.length > 0) setQuizQuestions(res);
+    } finally { setIsGeneratingQuiz(false); }
+  };
+
+  const handleToggleTodo = (id: string) => {
+      setPages(prev => prev.map(page => {
+          const todoIndex = page.todos?.findIndex(t => t.id === id);
+          if (todoIndex !== undefined && todoIndex > -1) {
+              const newTodos = [...(page.todos || [])];
+              newTodos[todoIndex] = { ...newTodos[todoIndex], completed: !newTodos[todoIndex].completed };
+              return { ...page, todos: newTodos };
+          }
+          return page;
+      }));
+  };
+
+  const handleUpdateTodo = (id: string, text: string, description?: string) => {
+      setPages(prev => prev.map(page => {
+          const todoIndex = page.todos?.findIndex(t => t.id === id);
+          if (todoIndex !== undefined && todoIndex > -1) {
+              const newTodos = [...(page.todos || [])];
+              newTodos[todoIndex] = { ...newTodos[todoIndex], text, description: description !== undefined ? description : newTodos[todoIndex].description };
+              return { ...page, todos: newTodos };
+          }
+          return page;
+      }));
+  };
+
+  const handleAddTodo = (text: string, description?: string, date?: string) => {
+      const targetPageId = activePageId || (pages.length > 0 ? pages[0].id : null);
+      if (!targetPageId) return;
+
+      const newTodo: ToDoItem = {
+          id: Date.now().toString(),
+          text,
+          description: description || "",
+          completed: false,
+          status: 'todo',
+          date: date
+      };
+
+      setPages(prev => prev.map(page => {
+          if (page.id === targetPageId) {
+              return { ...page, todos: [...(page.todos || []), newTodo] };
+          }
+          return page;
+      }));
+  };
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, type: 'video-section' | 'widget-section' | 'specific-widget' | 'notebook' | 'default', index?: number) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const items: ContextMenuItem[] = [];
+      if (type === 'notebook') {
+          items.push({ label: 'Smart Summary', icon: <SparklesIcon />, action: handleSummarize });
+          items.push({ label: 'Active Recall', icon: <LightBulbIcon />, action: handleStartRecall });
+          items.push({ separator: true });
+          items.push({ label: 'Focus Mode', icon: <FocusIcon />, action: () => setIsZenMode(!isZenMode) });
+      }
+      
+      // Hide Toggle Sidebar menu item if in dashboard
+      if (!showDashboard) {
+        items.push({ label: 'Toggle Sidebar', icon: <HotDogMenuIcon />, action: () => setIsSidebarOpen(!isSidebarOpen) });
+      }
+      
+      items.push({ label: 'Dashboard', icon: <LayoutDashboardIcon />, action: () => setShowDashboard(true) });
+      items.push({ label: 'Home', icon: <HomeIcon />, action: onGoHome });
+      setContextMenu({ x: e.clientX, y: e.clientY, items });
+  }, [activePageId, widgets, isZenMode, isSidebarOpen, onGoHome, showDashboard]);
+
+  const isModern = layoutMode === 'modern';
+
+  const containerClasses = isModern ? 'p-3 gap-3' : 'p-0 gap-0';
+  const sidebarContainerClasses = isModern 
+    ? 'rounded-3xl border border-[var(--border-primary)]/10 bg-[var(--bg-secondary)]/30 backdrop-blur-sm'
+    : 'rounded-none border-r border-[var(--border-primary)]/20 bg-[var(--bg-secondary)]/30 backdrop-blur-sm';
+  
+  const notebookContainerClasses = isModern
+    ? 'rounded-3xl border border-[var(--border-primary)]/10 bg-[var(--bg-primary)]/50 backdrop-blur-sm'
+    : 'rounded-none border-r border-[var(--border-primary)]/10 bg-[var(--bg-primary)]/50 backdrop-blur-sm';
+
+  const mediaPanelContainerClasses = isModern
+    ? `rounded-3xl bg-transparent` // Modern mode delegates rounded corners to inner MediaPanel components
+    : `rounded-none border-none bg-[var(--bg-secondary)]/10 border-l border-[var(--border-primary)]/10`;
+
   return (
-    <div 
-      className={`h-screen w-full transition-all overflow-hidden flex flex-col text-[var(--text-primary)]`} 
-      style={{ 
-          filter: `brightness(${brightness}%)`,
-          backgroundColor: wallpaperUrl ? 'var(--bg-primary-glass)' : 'var(--bg-primary)' 
-      }}
-    >
+    <div className={`h-screen w-full flex flex-col transition-all overflow-hidden relative ${wallpaperUrl ? 'text-white' : 'bg-[var(--bg-primary)] text-[var(--text-primary)]'}`} onContextMenu={(e) => { if (!contextMenu) handleContextMenu(e, 'default'); }}>
        <GlobalBackgroundAnimation animationType={backgroundAnimation} />
-       {wallpaperUrl && <div className="wallpaper-background" style={{ backgroundImage: `url(${wallpaperUrl})` }}></div>}
-       <input type="file" accept="image/*" ref={wallpaperInputRef} onChange={handleWallpaperChange} className="hidden" />
+       {wallpaperUrl && (
+           <>
+               <div className="fixed inset-0 z-[-2] bg-cover bg-center" style={{ backgroundImage: `url(${wallpaperUrl})` }} />
+               <div className="fixed inset-0 z-[-2] bg-black/40 backdrop-blur-[2px]" />
+           </>
+       )}
+       <input type="file" ref={wallpaperInputRef} className="hidden" accept="image/*" onChange={(e) => {
+          if (e.target.files?.[0]) {
+              const reader = new FileReader();
+              reader.onload = (event) => setWallpaperUrl(event.target?.result as string);
+              reader.readAsDataURL(e.target.files[0]);
+          }
+       }} />
 
-      <header className="flex-none flex items-center justify-between p-4 border-b border-[var(--border-primary)] h-[80px] bg-[var(--bg-primary)] z-50 transition-all duration-300 ml-16">
-        <div className="flex-1 flex justify-start">
-            <div className="flex items-center gap-4 md:gap-6">
-                <button 
-                    onClick={onGoHome}
-                    className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press w-10 h-10 flex items-center justify-center"
-                    title="Go to Landing Page"
-                >
-                    <HomeIcon className="w-5 h-5" />
-                </button>
-                <div className="flex items-center gap-4 hidden md:flex">
-                    <div className="relative group">
-                        {/* Modern Glassmorphic Logo Container */}
-                        <div className="relative p-2 rounded-xl bg-[var(--bg-secondary)]/50 backdrop-blur-md border border-[var(--border-primary)] shadow-sm group-hover:border-[var(--accent)] group-hover:shadow-lg transition-all duration-300 flex items-center justify-center">
-                            <InfinityIcon className="w-8 h-8" />
-                        </div>
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-primary)] to-[var(--text-secondary)]">Infi-Notes</h1>
-                        <p className="text-xs text-[var(--text-secondary)] font-medium hidden md:block tracking-wide">Focus. Watch. Write.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div className="flex-none hidden lg:flex items-center gap-2">
-             <Clock timezone={timezone} isThemeChanging={isThemeChanging} onChange={setTimezone} />
-        </div>
-        <div className="flex-1 flex justify-end">
-            <div className="flex items-center gap-2 sm:gap-4">
-                <div className="hidden sm:flex items-center gap-2 sm:gap-4">
-                  <button onClick={onOpenWidgets} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title="Open Widgets Board">
-                      <Squares2X2Icon className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => setShowPdfViewer(true)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title="PDF Library">
-                      <DocumentTextIcon className="w-5 h-5" />
-                  </button>
-                  
-                  <button 
-                      onClick={handleSwapLayout} 
-                      className={`p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all duration-500 btn-press ${isSwapping ? 'rotate-180' : ''}`}
-                      title="Swap Layout"
-                  >
-                      <ArrowsRightLeftIcon className="w-5 h-5" />
-                  </button>
-
-                  <button onClick={() => setIsZenMode(!isZenMode)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press" title={isZenMode ? "Exit Zen Mode" : "Enter Zen Mode"}>
-                      <FocusIcon className="w-5 h-5" />
-                  </button>
-                  
-                  <div className="relative" ref={themeMenuRef}>
-                      <button onClick={() => setShowThemeMenu(prev => !prev)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press">
-                          <ThemeIcon className="w-5 h-5" />
-                      </button>
-                      {showThemeMenu && (
-                          <div className="absolute top-full right-0 mt-2 z-50 bg-[var(--bg-secondary)] rounded-xl shadow-2xl border border-[var(--border-primary)] animated-popover p-2 flex gap-3">
-                              {[
-                                  { id: 'light', label: 'Light', style: 'bg-white border-gray-200 text-gray-800' },
-                                  { id: 'monokai', label: 'Monokai', style: 'bg-[#272822] border-[#75715E] text-[#F92672]' },
-                                  { id: 'pitch-black', label: 'Dark', style: 'bg-black border-gray-800 text-white' },
-                                  { id: 'cyberpunk', label: 'Cyber', style: 'bg-zinc-950 border-cyan-500 text-cyan-400' },
-                                  { id: 'frosty', label: 'Frosty', style: 'bg-blue-100 border-blue-200 text-blue-600' },
-                                  { id: 'matrix', label: 'Matrix', style: 'bg-black border-green-500 text-green-500 font-mono' },
-                              ].map((t) => (
-                                  <button
-                                      key={t.id}
-                                      onClick={() => selectTheme(t.id as Theme)}
-                                      className={`flex flex-col items-center gap-1 group`}
-                                  >
-                                      <div className={`w-12 h-8 rounded border-2 shadow-sm transition-transform group-hover:scale-105 ${t.style} ${theme === t.id ? 'ring-2 ring-[var(--accent)] ring-offset-1 ring-offset-[var(--bg-secondary)]' : ''}`}></div>
-                                      <span className="text-[10px] font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">{t.label}</span>
-                                  </button>
-                              ))}
-                          </div>
-                      )}
-                  </div>
-                </div>
-                {/* User Profile Dropdown */}
-                <div className="relative" ref={userMenuRef}>
-                    <button onClick={() => setShowUserMenu(prev => !prev)} className="flex items-center gap-2 p-1.5 rounded-full hover:bg-[var(--bg-secondary)] transition-all btn-press">
-                        <img src={user.avatar} alt="User Avatar" className="w-8 h-8 rounded-full border border-[var(--border-primary)]" />
-                        <ChevronDownIcon className={`w-4 h-4 text-[var(--text-secondary)] transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showUserMenu && (
-                        <div className="absolute top-full right-0 mt-2 z-50 w-64 bg-[var(--bg-secondary)] rounded-xl shadow-2xl border border-[var(--border-primary)] animated-popover overflow-hidden flex flex-col">
-                            <div className="p-4 border-b border-[var(--border-primary)] flex items-center gap-3">
-                                 <img src={user.avatar} alt="User" className="w-10 h-10 rounded-full border border-[var(--border-primary)]" />
-                                 <div className="overflow-hidden">
-                                     <p className="font-bold text-sm truncate">{user.name}</p>
-                                     <p className="text-xs text-[var(--text-secondary)] truncate">{user.email}</p>
-                                 </div>
-                            </div>
-                            <div className="p-1">
-                                <button onClick={() => { setShowSettings(true); setShowUserMenu(false); }} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--bg-primary)] rounded-md transition-all">
-                                     <QuestionMarkCircleIcon className="w-4 h-4 text-[var(--text-secondary)]" />
-                                     <span>Settings</span>
-                                </button>
-                                <button onClick={() => setShowShortcutHelp(true)} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-[var(--text-primary)] hover:bg-[var(--bg-primary)] rounded-md transition-all">
-                                     <QuestionMarkCircleIcon className="w-4 h-4 text-[var(--text-secondary)]" />
-                                     <span>Keyboard Shortcuts</span>
-                                </button>
-                                 <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded-md transition-all">
-                                    <LogoutIcon className="w-4 h-4" />
-                                    <span>Sign Out</span>
+       <div className={`${hideHeader ? 'fixed top-0 left-0 right-0 z-50 group' : 'flex-none relative z-50'}`}>
+           {hideHeader && <div className="h-4 w-full absolute top-0 left-0 bg-transparent z-50 cursor-default" />}
+           <header className={`grid grid-cols-3 items-center p-4 h-[80px] transition-all duration-300 ${wallpaperUrl ? 'bg-black/30 border-white/10 backdrop-blur-md shadow-lg' : 'bg-[var(--bg-primary)]/50 backdrop-blur-md border-[var(--border-primary)]/10'} ${hideHeader ? 'transform -translate-y-full group-hover:translate-y-0 border-b opacity-0 group-hover:opacity-100' : 'border-b opacity-100 translate-y-0'}`}>
+               <div className="flex items-center gap-4">
+                   {/* Conditionally hide sidebar toggle in dashboard */}
+                   {!showDashboard && (
+                       <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-colors"><HotDogMenuIcon className="w-5 h-5" /></button>
+                   )}
+                   <button onClick={() => setShowDashboard(true)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-colors" title="Dashboard"><LayoutDashboardIcon className="w-5 h-5"/></button>
+                   <button onClick={onGoHome} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-colors text-[var(--accent)]" title="Return to Landing Page"><HomeIcon className="w-5 h-5"/></button>
+               </div>
+               <div className="flex justify-center"><Clock timezone={timezone} isThemeChanging={false} onChange={setTimezone} /></div>
+               <div className="flex items-center justify-end gap-2">
+                   <div className="relative" ref={themeMenuRef}>
+                        <button onClick={() => setShowThemeMenu(!showThemeMenu)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-colors text-[var(--accent)]">
+                            <SwatchIcon className="w-5 h-5"/>
+                        </button>
+                        {showThemeMenu && (
+                            <div className="absolute top-full right-0 mt-2 z-50 bg-[var(--bg-secondary)]/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-[var(--border-primary)] animated-popover p-3 flex flex-row gap-3 min-w-max max-w-[90vw] overflow-x-auto custom-scrollbar">
+                                {Object.keys(THEME_PALETTES).map((t) => (
+                                    <button 
+                                        key={t} 
+                                        onClick={() => { setTheme(t as Theme); setShowThemeMenu(false); }}
+                                        className={`flex flex-col items-center gap-2 p-2.5 rounded-xl transition-all duration-300 min-w-[90px] group/item border ${theme === t ? 'bg-[var(--bg-primary)] border-[var(--accent)] shadow-md' : 'bg-transparent border-transparent hover:bg-[var(--bg-primary)]'}`}
+                                    >
+                                        <div className="relative flex flex-col gap-0.5 w-full">
+                                            {THEME_PALETTES[t as Theme].map((color, i) => (
+                                                <div key={i} className="w-full h-1.5 rounded-full border border-black/5 shadow-sm" style={{ backgroundColor: color }} />
+                                            ))}
+                                            {theme === t && (
+                                                <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-primary)]/40 rounded-lg">
+                                                    <CheckIcon className="w-4 h-4 text-[var(--accent)]" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <span className="text-[10px] font-black uppercase tracking-widest truncate w-full text-center">{t}</span>
+                                    </button>
+                                ))}
+                                <div className="w-px bg-[var(--border-primary)]/50 self-stretch my-2" />
+                                <button 
+                                    onClick={() => { wallpaperInputRef.current?.click(); setShowThemeMenu(false); }}
+                                    className="flex flex-col items-center justify-center gap-2 p-2.5 rounded-xl border-2 border-dashed border-[var(--border-primary)] text-[var(--accent)] hover:bg-[var(--bg-primary)] hover:border-[var(--accent)] transition-all min-w-[90px]"
+                                >
+                                    <ImageIcon className="w-5 h-5" />
+                                    <span className="text-[9px] font-black uppercase tracking-tighter text-center leading-tight">Add Wall</span>
                                 </button>
                             </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-      </header>
-      
-      {/* Main Body Container */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Sidebar ... */}
-        <div className={`
-            absolute lg:relative inset-y-0 left-0 z-40 h-full sidebar-root
-            transition-all duration-300 ease-in-out bg-[var(--bg-primary)] overflow-hidden
-            ${isSidebarOpen && !isZenMode 
-                ? 'translate-x-0 w-72 border-r border-[var(--border-primary)]' 
-                : '-translate-x-full w-0 lg:w-0 lg:translate-x-0 border-none'}
-        `}>
-            <Sidebar 
-                isOpen={true}
-                pages={filteredPages}
-                activePageId={activePageId}
-                onSelectPage={(id) => { setActivePageId(id); if(window.innerWidth < 1024) setIsSidebarOpen(false); }}
-                onAddPage={handleAddNewPage}
-                onDeletePage={handleDeletePage}
-                onRenamePage={handleRenamePage}
-                onMovePage={handleMovePage}
-                backgroundAnimation={backgroundAnimation as any}
-                onAnimationChange={(t) => setBackgroundAnimation(t)}
-                tagsMap={allTagsMap}
-                selectedTag={selectedTag}
-                onSelectTag={setSelectedTag}
-                onOpenSettings={() => setShowSettings(true)}
-            />
-        </div>
+                        )}
+                   </div>
+                   <button onClick={() => setShowSettings(true)} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-colors"><CogIcon className="w-5 h-5"/></button>
+                   <button onClick={onOpenWidgets} className="p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-colors"><Squares2X2Icon className="w-5 h-5"/></button>
+                   <button onClick={onLogout} className="p-2 rounded-full hover:bg-rose-500/10 text-rose-500 transition-colors"><LogoutIcon className="w-5 h-5"/></button>
+               </div>
+           </header>
+       </div>
 
-        {/* Mobile Sidebar Backdrop */}
-        {isSidebarOpen && !isZenMode && (
-            <div 
-                className="lg:hidden absolute inset-0 bg-black/50 z-30 backdrop-blur-sm"
-                onClick={() => setIsSidebarOpen(false)}
-            />
-        )}
+       <main className={`flex-1 flex overflow-hidden relative z-10 bg-transparent ${containerClasses}`}>
+           {showDashboard ? (
+               <div className={`flex-1 overflow-hidden relative bg-[var(--bg-secondary)]/10 backdrop-blur-sm border border-[var(--border-primary)]/10 ${isModern ? 'rounded-3xl' : 'rounded-none'}`}>
+                   <Dashboard 
+                       user={user} 
+                       todos={allTodos} 
+                       pages={pages} 
+                       onOpenNote={handleOpenNotebook} 
+                       onToggleTodo={handleToggleTodo} 
+                       onUpdateTodo={handleUpdateTodo} 
+                       onAddTodo={handleAddTodo}
+                       theme={theme} 
+                       setTheme={setTheme} 
+                       onContextMenu={(e) => handleContextMenu(e, 'default')} 
+                       onUploadWallpaper={() => wallpaperInputRef.current?.click()} 
+                       onCloseDashboard={() => setShowDashboard(false)}
+                   />
+               </div>
+           ) : (
+               <>
+                   {/* Sidebar restricted ONLY to non-dashboard view */}
+                   <div className={`transition-all duration-500 overflow-hidden ${sidebarContainerClasses} ${isSidebarOpen ? 'w-72' : 'w-0'}`}>
+                      <div className="w-72 h-full">
+                           <Sidebar isOpen={isSidebarOpen} pages={pages} activePageId={activePageId} onSelectPage={handleOpenNotebook} onAddPage={handleAddNewPage} onDeletePage={(id) => setPages(p => p.filter(pg => pg.id !== id))} onRenamePage={(id, t) => setPages(p => p.map(pg => pg.id === id ? {...pg, title: t} : pg))} onMovePage={() => {}} backgroundAnimation={backgroundAnimation as any} onAnimationChange={setBackgroundAnimation} tagsMap={tagsMap} selectedTag={selectedTag} onSelectTag={setSelectedTag} onOpenSettings={() => setShowSettings(true)} />
+                      </div>
+                   </div>
 
-        <main className={`flex-1 flex flex-col ${isLayoutSwapped ? 'lg:flex-row-reverse' : 'lg:flex-row'} w-full overflow-y-auto lg:overflow-hidden bg-transparent`}>
-            {/* Notebook Section */}
-            <div 
-                className={`
-                    flex-shrink-0 relative
-                    ${isZenMode ? 'w-full h-full' : 'w-full lg:w-1/2'}
-                    ${!isZenMode ? (isLayoutSwapped ? 'lg:border-l' : 'lg:border-r') + ' lg:border-[var(--border-primary)]' : ''}
-                    h-[45vh] lg:h-full
-                `}
-                style={{ viewTransitionName: 'notebook-section' }}
-            >
-                <Notebook 
-                  ref={notebookEditorRef}
-                  pageContent={notes}
-                  pageTitle={activePage?.title}
-                  pageIcon={activePage?.icon}
-                  pageCover={activePage?.coverImage}
-                  pageTags={activePage?.tags || []}
-                  allTags={Array.from(allTagsMap.keys())}
-                  onNotesChange={handleNotesChange}
-                  onTitleChange={(newTitle) => activePageId && handleRenamePage(activePageId, newTitle)}
-                  onIconChange={(newIcon) => handlePageMetaChange({ icon: newIcon })}
-                  onCoverChange={(newCover) => handlePageMetaChange({ coverImage: newCover })}
-                  onTagsChange={(newTags) => handlePageMetaChange({ tags: newTags })}
-                  onSummarize={handleSummarize}
-                  isSummarizing={isSummarizing}
-                  onStartRecall={() => setShowRecallPrompt(true)}
-                  isGeneratingQuiz={isGeneratingQuiz}
-                  pageTodos={activePage?.todos}
-                  onTodosChange={handleTodosChange}
-                  onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-                />
-                {summaryContent && (
-                    <SummaryView 
-                        summaryContent={summaryContent}
-                        onClose={() => setSummaryContent(null)}
-                        onAppend={handleAppendSummary}
-                    />
-                )}
-            </div>
-            
-             {/* MediaPanel Section */}
-            {!isZenMode && (
-              <div 
-                className="w-full lg:w-1/2 flex-shrink-0 h-auto min-h-[55vh] lg:h-full lg:min-h-0 border-t lg:border-t-0 border-[var(--border-primary)] relative"
-                style={{ viewTransitionName: 'media-section' }}
-              >
-                  <MediaPanel 
-                      videoUrl={videoUrl}
-                      onVideoUrlChange={setVideoUrl}
-                      onLoadVideo={handleLoadVideo}
-                      videoId={videoId}
-                      widgets={widgets}
-                      onWidgetPlaceholderClick={handleWidgetPlaceholderClick}
-                      onSelectWidget={selectWidget}
-                      updateWidgetData={updateWidgetData}
-                      onRemoveWidget={removeWidget}
-                      activeWidgetIndex={activeWidgetIndex}
-                      onSetActiveWidget={setActiveWidgetIndex}
-                      onToggleWidgetBg={handleToggleWidgetBg}
-                      onTerminalCommand={handleTerminalCommand}
-                      onMoveWidget={handleMoveWidget}
-                  />
-              </div>
-            )}
-        </main>
-      </div>
-      
-      <Modal
-        isOpen={showRecallPrompt}
-        onClose={() => setShowRecallPrompt(false)}
-        title="Active Recall Session"
-      >
-        <div>
-            <p className="text-[var(--text-secondary)] mb-6">Ready to test your knowledge? We'll generate a short quiz based on your notes.</p>
-            <div className="flex justify-end gap-3">
-                <button onClick={() => setShowRecallPrompt(false)} className="px-4 py-2 font-semibold bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-md hover:bg-[var(--border-primary)] transition-all btn-press">Maybe Next Time</button>
-                <button onClick={handleStartRecall} className="px-4 py-2 font-semibold text-white bg-[var(--accent)] rounded-md hover:opacity-90 transition-all btn-press">Yeah, Continue</button>
-            </div>
-        </div>
-      </Modal>
+                   <div className={`flex-1 h-full overflow-hidden flex flex-col relative transition-all duration-700 ease-out transform ${notebookContainerClasses} ${!notebookVisible ? 'hidden' : ''} ${animStage >= 1 ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-10'}`}>
+                       {/* Label Overlay for Notebook Section - Stylized NOTES with Glassy Card covering entire section */}
+                       {(animStage === 3 || animStage === 4) && (
+                            <div className={`absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none 
+                                bg-[var(--bg-secondary)]/60 backdrop-blur-xl border border-[var(--border-primary)]/20 shadow-2xl rounded-3xl
+                                ${animStage === 3 ? 'animate-[fadeIn_0.5s_ease-out]' : 'animate-brush-exit'}
+                            `}>
+                                <span className="text-4xl font-black uppercase tracking-[0.5em] text-[var(--text-primary)]/40 drop-shadow-sm animate-pulse">Notes</span>
+                                <div className="h-0.5 w-64 bg-gradient-to-r from-transparent via-[var(--accent)]/50 to-transparent mt-4"></div>
+                            </div>
+                        )}
 
-      {quizQuestions && (
-        <QuizView questions={quizQuestions} onClose={handleCloseQuiz} />
-      )}
-
-      {quizError && (
-        <Modal isOpen={!!quizError} onClose={() => setQuizError(null)} title="Error">
-             <div>
-                <p className="text-[var(--text-secondary)] mb-6">{quizError}</p>
-                <div className="flex justify-end">
-                    <button onClick={() => setQuizError(null)} className="px-4 py-2 font-semibold text-white bg-[var(--accent)] rounded-md hover:opacity-90 transition-all btn-press">OK</button>
-                </div>
-            </div>
-        </Modal>
-      )}
-
-      {errorMessage && (
-        <Modal isOpen={!!errorMessage} onClose={() => setErrorMessage(null)} title="Notice">
-            <div>
-                <p className="text-[var(--text-secondary)] mb-6">{errorMessage}</p>
-                <div className="flex justify-end">
-                    <button onClick={() => setErrorMessage(null)} className="px-4 py-2 font-semibold text-white bg-[var(--accent)] rounded-md hover:opacity-90 transition-all btn-press">OK</button>
-                </div>
-            </div>
-        </Modal>
-      )}
-
-      <ShortcutHelp isOpen={showShortcutHelp} onClose={() => setShowShortcutHelp(false)} />
-      
-      {showSettings && (
-          <SettingsModal 
-            isOpen={showSettings} 
-            onClose={() => setShowSettings(false)} 
-            user={user} 
-            onUpdateUser={onUpdateUser}
-            onLogout={onLogout}
-          />
-      )}
-
-      {/* PDF Library Modal */}
-      {showPdfViewer && (
-        <PdfViewer 
-            isOpen={showPdfViewer} 
-            onClose={() => setShowPdfViewer(false)} 
-            library={pdfLibrary}
-            onAddToLibrary={(files) => setPdfLibrary(prev => [...prev, ...files])}
-            onDefineWord={handleDefineWord}
-        />
-      )}
+                       {isShelfVisible ? (
+                           <NotebookShelf notebooks={pages.filter(p => !p.parentId)} onOpenNotebook={handleOpenNotebook} onAddNotebook={() => handleAddNewPage(null, false)} onDeleteNotebook={(id) => setPages(p => p.filter(pg => pg.id !== id))} onRenameNotebook={(id, t) => setPages(p => p.map(pg => pg.id === id ? {...pg, title: t} : pg))} onUpdateCover={(id, cover) => setPages(p => p.map(pg => pg.id === id ? {...pg, coverImage: cover} : pg))} />
+                       ) : (
+                           <div className="flex-1 flex flex-col animate-[fadeIn_0.3s_ease-out]">
+                                <Notebook 
+                                    pageContent={notes} pageTitle={activePage?.title} pageTags={activePage?.tags || []} allTags={Array.from(tagsMap.keys())} onNotesChange={(c) => setPages(p => p.map(pg => pg.id === activePageId ? {...pg, content: c} : pg))} onTitleChange={(t) => setPages(p => p.map(pg => pg.id === activePageId ? {...pg, title: t} : pg))} onTagsChange={(t) => setPages(p => p.map(pg => pg.id === activePageId ? {...pg, tags: t} : pg))} onIconChange={(i) => setPages(p => p.map(pg => pg.id === activePageId ? {...pg, icon: i} : pg))} onCoverChange={(c) => setPages(p => p.map(pg => pg.id === activePageId ? {...pg, coverImage: c} : pg))} onSummarize={handleSummarize} isSummarizing={isSummarizing} onStartRecall={handleStartRecall} isGeneratingQuiz={isGeneratingQuiz} onTodosChange={(t) => setPages(p => p.map(pg => pg.id === activePageId ? {...pg, todos: t} : pg))} isOnline={isOnline} onBackToShelf={() => setIsShelfVisible(true)} onContextMenu={(e) => handleContextMenu(e, 'notebook')} 
+                                    summaryContent={summaryContent}
+                                    onCloseSummary={() => setSummaryContent(null)}
+                                    onAppendSummary={(text) => { const newContent = notes + `\n\n${text}`; setPages(p => p.map(pg => pg.id === activePageId ? {...pg, content: newContent} : pg)); setSummaryContent(null); }}
+                                    floatingWidgets={floatingWidgets}
+                                    onAddFloatingWidget={(w) => setFloatingWidgets(prev => [...prev, w])}
+                                    onRemoveFloatingWidget={(id) => setFloatingWidgets(prev => prev.filter(w => w.id !== id))}
+                                    onUpdateFloatingWidget={(id, updates) => setFloatingWidgets(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w))}
+                                />
+                           </div>
+                       )}
+                   </div>
+                   {(videoVisible || widgetsVisible) && (
+                       <div className={`flex-1 h-full overflow-hidden transition-all duration-300 relative ${mediaPanelContainerClasses} ${isHoveringWidget ? 'z-50' : 'z-20'}`}>
+                           <MediaPanel 
+                            videoUrl={videoUrl} 
+                            onVideoUrlChange={setVideoUrl} 
+                            onLoadVideo={() => {}} 
+                            videoId={videoId} 
+                            widgets={widgets} 
+                            onWidgetPlaceholderClick={(i) => {const w = [...widgets]; w[i] = {type: 'selecting'}; setWidgets(w);}} 
+                            onSelectWidget={(i, t) => { const newWidgets = [...widgets]; newWidgets[i] = { type: t, data: {} }; setWidgets(newWidgets); }} 
+                            updateWidgetData={(i, d) => { const w = [...widgets]; w[i].data = d; setWidgets(w); }} 
+                            onRemoveWidget={(i) => { const w = [...widgets]; w[i] = {type: 'empty'}; setWidgets(w); }} 
+                            activeWidgetIndex={activeWidgetIndex} 
+                            onSetActiveWidget={setActiveWidgetIndex} 
+                            onToggleWidgetBg={(i) => {
+                                 const w = [...widgets];
+                                 w[i] = { ...w[i], isBgToggled: !w[i].isBgToggled };
+                                 setWidgets(w);
+                            }} 
+                            onTerminalCommand={(i, command, args) => {
+                                 const w = [...widgets];
+                                 const history = w[i].data?.history || [];
+                                 w[i].data = { ...w[i].data, history: [...history, `> ${command} ${args.join(' ')}`, `Command executed.`] };
+                                 setWidgets(w);
+                            }} 
+                            onMoveWidget={(from, to) => {
+                                 const w = [...widgets];
+                                 const [removed] = w.splice(from, 1);
+                                 w.splice(to, 0, removed);
+                                 setWidgets(w);
+                            }} 
+                            videoVisible={videoVisible} 
+                            widgetsVisible={widgetsVisible} 
+                            onContextMenu={handleContextMenu} 
+                            isOnline={isOnline} 
+                            animStage={animStage} 
+                            onWidgetHoverStateChange={setIsHoveringWidget}
+                            layoutMode={layoutMode}
+                           />
+                       </div>
+                   )}
+               </>
+           )}
+           <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} user={user} onUpdateUser={onUpdateUser} onLogout={onLogout} hideHeader={hideHeader} onToggleHideHeader={() => setHideHeader(!hideHeader)} layoutMode={layoutMode} onLayoutChange={onLayoutChange} />
+           {quizQuestions && <QuizView questions={quizQuestions} onClose={() => setQuizQuestions(null)} />}
+           {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => setContextMenu(null)} />}
+       </main>
     </div>
   );
 }

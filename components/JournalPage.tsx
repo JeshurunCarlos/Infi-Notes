@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, Theme } from '../types';
-import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon, LogoutIcon, ThemeIcon, LightBulbIcon } from './Icons';
+import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon, LogoutIcon, SwatchIcon, LightBulbIcon, CheckIcon, HomeIcon } from './Icons';
 import { chatWithJournal } from '../lib/ai';
 import Spinner from './Spinner';
 
@@ -11,6 +11,7 @@ interface JournalPageProps {
     onLogout: () => void;
     theme: Theme;
     setTheme: (theme: Theme) => void;
+    onGoHome?: () => void;
 }
 
 interface ChatMessage {
@@ -19,80 +20,24 @@ interface ChatMessage {
 }
 
 const ClassicDrawings = [
-    // 1. The Eye (Providence)
     (props: any) => (
-        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="0.5" {...props}>
-            <path d="M50 20 C30 35, 10 50, 50 80 C90 50, 70 35, 50 20 Z" />
-            <circle cx="50" cy="45" r="12" />
-            <circle cx="50" cy="45" r="4" fill="currentColor" fillOpacity="0.1"/>
-            <path d="M50 15 L50 5 M50 95 L50 85 M10 50 L20 50 M90 50 L80 50 M25 25 L32 32 M75 25 L68 32 M25 75 L32 68 M75 75 L68 68" strokeOpacity="0.5" />
+        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+            <path d="M50 20 C30 35, 10 50, 50 80 C90 50, 70 35, 50 20 Z" strokeOpacity="0.8" />
+            <circle cx="50" cy="45" r="12" strokeOpacity="0.6" />
+            <circle cx="50" cy="45" r="4" fill="currentColor" fillOpacity="0.2"/>
+            <path d="M50 15 L50 5 M50 95 L50 85 M10 50 L20 50 M90 50 L80 50" strokeOpacity="0.4" />
         </svg>
     ),
-    // 2. The Compass (Geometry)
     (props: any) => (
-        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="0.5" {...props}>
+        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
             <circle cx="50" cy="50" r="40" strokeOpacity="0.3" />
-            <circle cx="50" cy="50" r="35" strokeOpacity="0.2" />
-            <path d="M50 10 L50 90 M10 50 L90 50" />
-            <path d="M50 10 L60 40 L90 50 L60 60 L50 90 L40 60 L10 50 L40 40 Z" fill="currentColor" fillOpacity="0.05" />
-            <circle cx="50" cy="50" r="2" fill="currentColor" />
+            <path d="M50 10 L50 90 M10 50 L90 50" strokeOpacity="0.2" />
+            <path d="M50 10 L60 40 L90 50 L60 60 L50 90 L40 60 L10 50 L40 40 Z" strokeOpacity="0.6" />
         </svg>
     ),
-    // 3. The Hourglass (Time)
-    (props: any) => (
-        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="0.5" {...props}>
-            <path d="M30 10 L70 10 L60 40 Q50 50 60 60 L70 90 L30 90 L40 60 Q50 50 40 40 Z" />
-            <path d="M35 15 L65 15" strokeOpacity="0.3" />
-            <path d="M35 85 L65 85" strokeOpacity="0.3" />
-            <path d="M45 65 L50 75 L55 65" fill="currentColor" fillOpacity="0.1" />
-            <circle cx="50" cy="80" r="12" fill="currentColor" fillOpacity="0.05" />
-        </svg>
-    ),
-    // 4. The Sun (Esoteric)
-    (props: any) => (
-        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="0.5" {...props}>
-            <circle cx="50" cy="50" r="20" />
-            <path d="M50 20 L50 10 M50 80 L50 90 M20 50 L10 50 M80 50 L90 50" />
-            <path d="M30 30 L22 22 M70 70 L78 78 M30 70 L22 78 M70 30 L78 22" />
-            <path d="M50 25 Q65 25 65 50 Q65 75 50 75 Q35 75 35 50 Q35 25 50 25" strokeOpacity="0.5" />
-            <path d="M40 45 Q50 55 60 45" strokeOpacity="0.5" />
-        </svg>
-    ),
-    // 5. The Moon (Crescent)
-    (props: any) => (
-        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="0.5" {...props}>
-            <path d="M40 10 A 40 40 0 1 0 40 90 A 30 30 0 1 1 40 10" fill="currentColor" fillOpacity="0.05"/>
-            <circle cx="70" cy="30" r="2" fill="currentColor" fillOpacity="0.5" />
-            <circle cx="80" cy="50" r="1.5" fill="currentColor" fillOpacity="0.5" />
-            <circle cx="65" cy="70" r="2.5" fill="currentColor" fillOpacity="0.5" />
-        </svg>
-    ),
-    // 6. The Quill (Writing)
-    (props: any) => (
-        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="0.5" {...props}>
-            <path d="M80 10 Q60 10 40 40 Q20 70 20 90 L25 85 Q30 70 50 50 Q70 30 80 10" />
-            <path d="M40 40 L60 60" strokeOpacity="0.3" />
-            <path d="M45 35 L65 55" strokeOpacity="0.3" />
-            <path d="M50 30 L70 50" strokeOpacity="0.3" />
-        </svg>
-    ),
-    // 7. The Tree (Life)
-    (props: any) => (
-        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="0.5" {...props}>
-            <path d="M50 90 L50 60" strokeWidth="1"/>
-            <path d="M50 60 Q30 50 20 30" />
-            <path d="M50 60 Q70 50 80 30" />
-            <path d="M50 60 Q50 30 50 10" />
-            <path d="M50 40 Q30 30 30 20" />
-            <path d="M50 40 Q70 30 70 20" />
-            <circle cx="20" cy="30" r="2" fill="currentColor" fillOpacity="0.1" />
-            <circle cx="80" cy="30" r="2" fill="currentColor" fillOpacity="0.1" />
-            <circle cx="50" cy="10" r="2" fill="currentColor" fillOpacity="0.1" />
-        </svg>
-    )
 ];
 
-const JournalPage: React.FC<JournalPageProps> = ({ user, onBack, onLogout, theme, setTheme }) => {
+const JournalPage: React.FC<JournalPageProps> = ({ user, onBack, onLogout, theme, setTheme, onGoHome }) => {
     const [entry, setEntry] = useState('');
     const [showChat, setShowChat] = useState(false);
     const [chatInput, setChatInput] = useState('');
@@ -100,61 +45,65 @@ const JournalPage: React.FC<JournalPageProps> = ({ user, onBack, onLogout, theme
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [date, setDate] = useState(new Date());
     const scrollRef = useRef<HTMLDivElement>(null);
-    
-    // New Features State
     const [mood, setMood] = useState<string | null>(null);
     const [gratitude, setGratitude] = useState('');
-    
-    // Theme State
     const [showThemeMenu, setShowThemeMenu] = useState(false);
     const themeMenuRef = useRef<HTMLDivElement>(null);
+    const [allEntries, setAllEntries] = useState<Record<string, string>>({});
+    const dateKey = date.toLocaleDateString('en-CA'); 
 
-    const moods = [
-        'Stressed',
-        'Sad',
-        'Neutral',
-        'Calm',
-        'Happy',
-        'Energetic',
-    ];
+    useEffect(() => {
+        if (user?.id) {
+            const savedData = localStorage.getItem(`journal_entries_${user.id}`);
+            if (savedData) {
+                try {
+                    setAllEntries(JSON.parse(savedData));
+                } catch (e) {
+                    console.error("Failed to parse journal entries", e);
+                }
+            }
+        }
+    }, [user?.id]);
 
-    // Gradients for moods
-    const moodGradients: Record<string, string> = {
-        'Stressed': 'bg-gradient-to-r from-red-500 to-orange-500 border-red-500',
-        'Sad': 'bg-gradient-to-r from-blue-500 to-indigo-500 border-blue-500',
-        'Neutral': 'bg-gradient-to-r from-gray-400 to-slate-500 border-gray-400',
-        'Calm': 'bg-gradient-to-r from-teal-400 to-emerald-500 border-teal-400',
-        'Happy': 'bg-gradient-to-r from-yellow-400 to-amber-500 border-yellow-400',
-        'Energetic': 'bg-gradient-to-r from-pink-500 to-rose-500 border-pink-500',
+    useEffect(() => {
+        setEntry(allEntries[dateKey] || '');
+    }, [dateKey, allEntries]);
+
+    const handleEntryChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const val = e.target.value;
+        setEntry(val);
+        const updatedEntries = { ...allEntries, [dateKey]: val };
+        setAllEntries(updatedEntries);
+        if (user?.id) localStorage.setItem(`journal_entries_${user.id}`, JSON.stringify(updatedEntries));
     };
 
-    // Determine Background Drawing
+    const moods = [
+        { label: 'Stressed', themeKey: 'danger' },
+        { label: 'Sad', themeKey: 'accent' },
+        { label: 'Neutral', themeKey: 'text-secondary' },
+        { label: 'Calm', themeKey: 'success' },
+        { label: 'Happy', themeKey: 'warning' },
+        { label: 'Energetic', themeKey: 'accent' },
+    ];
+
     const SelectedDrawing = useMemo(() => {
         const dateString = date.toLocaleDateString();
         let hash = 0;
-        for (let i = 0; i < dateString.length; i++) {
-            hash = dateString.charCodeAt(i) + ((hash << 5) - hash);
-        }
+        for (let i = 0; i < dateString.length; i++) hash = dateString.charCodeAt(i) + ((hash << 5) - hash);
         const index = Math.abs(hash) % ClassicDrawings.length;
         return ClassicDrawings[index];
     }, [date]);
 
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
+        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }, [chatHistory, showChat, isAiThinking]);
     
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
-                setShowThemeMenu(false);
-            }
+            if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) setShowThemeMenu(false);
         };
         document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
     const sendMessage = async (message: string) => {
@@ -162,14 +111,7 @@ const JournalPage: React.FC<JournalPageProps> = ({ user, onBack, onLogout, theme
         setChatHistory(newHistory);
         setChatInput('');
         setIsAiThinking(true);
-
-        // Combine entry, mood, and gratitude for context
-        const fullContext = `
-        Journal Entry: ${entry}
-        Mood: ${mood || 'Not specified'}
-        Gratitude: ${gratitude}
-        `;
-
+        const fullContext = `Journal Entry: ${entry}\nMood: ${mood || 'Not specified'}\nGratitude: ${gratitude}`;
         try {
             const response = await chatWithJournal(fullContext, message, chatHistory);
             setChatHistory([...newHistory, { role: 'model' as const, text: response }]);
@@ -198,203 +140,145 @@ const JournalPage: React.FC<JournalPageProps> = ({ user, onBack, onLogout, theme
     };
 
     return (
-        <div className="min-h-screen w-full bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans transition-colors duration-500 ease-in-out flex flex-col relative overflow-hidden selection:bg-[var(--accent)] selection:text-white">
-            
-            {/* Background Layer with Classic Drawing */}
+        <div className="h-screen w-full bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-500 ease-in-out flex flex-col relative overflow-hidden selection:bg-[var(--accent)] selection:text-white">
             <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center overflow-hidden">
-                {/* Decorative Background Blobs */}
                 <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[var(--accent)]/5 rounded-full blur-[120px]" />
                 <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-[var(--success)]/5 rounded-full blur-[120px]" />
-                
-                {/* Random Classic Drawing */}
-                <div className="w-[80vw] h-[80vw] md:w-[600px] md:h-[600px] text-[var(--text-secondary)] opacity-[0.03] transition-all duration-1000 rotate-12">
-                    <SelectedDrawing className="w-full h-full" />
-                </div>
             </div>
 
-            {/* Header */}
-            <header className="relative z-20 px-6 py-6 flex justify-between items-center max-w-7xl mx-auto w-full">
-                <button 
-                    onClick={onBack} 
-                    className="group flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-                >
-                    <div className="p-2 rounded-full bg-[var(--bg-secondary)]/50 border border-[var(--border-primary)] group-hover:border-[var(--accent)] transition-colors">
-                        <ChevronLeftIcon className="w-4 h-4" />
-                    </div>
-                    <span className="text-sm font-medium hidden sm:block">Back</span>
-                </button>
-
-                {/* Central Date Display */}
-                <div className="flex flex-col items-center">
-                    <div className="flex items-center gap-6">
-                        <button onClick={() => handleDateChange(-1)} className="text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors p-2"><ChevronLeftIcon className="w-5 h-5" /></button>
-                        <div className="text-center">
-                            <h2 className="font-journal text-3xl font-bold text-[var(--text-primary)] tracking-tight">
-                                {date.toLocaleDateString('en-US', { weekday: 'long' })}
-                            </h2>
-                            <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] mt-1">
-                                {date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                            </p>
+            <header className="flex-none relative z-20 px-6 py-4 flex justify-between items-center max-w-7xl mx-auto w-full border-b border-[var(--border-primary)]/50 bg-[var(--bg-primary)]/50 backdrop-blur-sm">
+                <div className="flex items-center gap-2">
+                    <button onClick={onBack} className="group flex items-center gap-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+                        <div className="p-2 rounded-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] group-hover:border-[var(--accent)] transition-colors">
+                            <ChevronLeftIcon className="w-4 h-4" />
                         </div>
-                        <button onClick={() => handleDateChange(1)} className="text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors p-2"><ChevronRightIcon className="w-5 h-5" /></button>
+                        <span className="text-sm font-medium hidden sm:block">Back</span>
+                    </button>
+                    {onGoHome && (
+                        <button onClick={onGoHome} className="p-2 rounded-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent)] transition-all text-[var(--accent)] ml-2" title="Home">
+                            <HomeIcon className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <button onClick={() => handleDateChange(-1)} className="text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors p-1 rounded-full hover:bg-[var(--bg-secondary)]"><ChevronLeftIcon className="w-5 h-5" /></button>
+                    <div className="text-center min-w-[180px]">
+                        <h2 className="text-2xl font-bold text-[var(--text-primary)] tracking-tight" style={{ fontFamily: 'var(--font-heading)' }}>{date.toLocaleDateString('en-US', { weekday: 'long' })}</h2>
+                        <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-80">{date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
                     </div>
+                    <button onClick={() => handleDateChange(1)} className="text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors p-1 rounded-full hover:bg-[var(--bg-secondary)]"><ChevronRightIcon className="w-5 h-5" /></button>
                 </div>
 
                 <div className="flex items-center gap-3">
-                    {/* Theme Switcher */}
                     <div className="relative" ref={themeMenuRef}>
-                        <button 
-                            onClick={() => setShowThemeMenu(prev => !prev)} 
-                            className="p-2 rounded-full bg-[var(--bg-secondary)]/50 border border-[var(--border-primary)] hover:border-[var(--accent)] transition-all text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                            title="Change Theme"
-                        >
-                            <ThemeIcon className="w-5 h-5" />
+                        <button onClick={() => setShowThemeMenu(prev => !prev)} className="p-2 rounded-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] hover:border-[var(--accent)] transition-all text-[var(--text-secondary)] hover:text-[var(--text-primary)]" title="Change Theme">
+                            <SwatchIcon className="w-5 h-5" />
                         </button>
                         {showThemeMenu && (
-                            <div className="absolute top-full right-0 mt-2 z-50 bg-[var(--bg-secondary)] rounded-xl shadow-xl border border-[var(--border-primary)] animated-popover p-2 flex gap-2 font-sans w-max">
-                                {[
-                                    { id: 'light', label: 'Light', style: 'bg-white border-gray-200 text-gray-800' },
-                                    { id: 'matrix', label: 'Matrix', style: 'bg-black border-green-500 text-green-500 font-mono' },
-                                    { id: 'monokai', label: 'Monokai', style: 'bg-[#272822] border-[#75715E] text-[#F92672]' },
-                                    { id: 'pitch-black', label: 'Dark', style: 'bg-black border-gray-800 text-white' },
-                                    { id: 'frosty', label: 'Frosty', style: 'bg-blue-100 border-blue-200 text-blue-600' }
-                                ].map((t) => (
-                                    <button
-                                        key={t.id}
-                                        onClick={() => { setTheme(t.id as Theme); setShowThemeMenu(false); }}
-                                        className={`flex flex-col items-center gap-1 group p-1`}
+                            <div className="absolute top-full right-0 mt-2 z-50 bg-[var(--bg-secondary)] rounded-xl shadow-2xl border border-[var(--border-primary)] animated-popover p-2 flex flex-col gap-1 min-w-[150px]">
+                                {['light', 'matrix', 'monokai', 'pitch-black', 'frosty', 'cyberpunk', 'paper'].map((t) => (
+                                    <button 
+                                        key={t} 
+                                        onClick={() => { setTheme(t as Theme); setShowThemeMenu(false); }}
+                                        className="px-3 py-2 text-left text-sm font-bold capitalize hover:bg-[var(--bg-primary)] rounded-lg transition-colors flex items-center justify-between text-[var(--text-primary)]"
                                     >
-                                        <div className={`w-8 h-8 rounded-full border-2 shadow-sm transition-transform group-hover:scale-110 ${t.style} ${theme === t.id ? 'ring-2 ring-[var(--accent)] ring-offset-1 ring-offset-[var(--bg-secondary)]' : ''}`}></div>
-                                        <span className="text-[10px] font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">{t.label}</span>
+                                        {t}
+                                        {theme === t && <CheckIcon className="w-3 h-3 text-[var(--accent)]" />}
                                     </button>
                                 ))}
                             </div>
                         )}
                     </div>
-
-                    <button 
-                        onClick={onLogout} 
-                        className="p-2 rounded-full bg-[var(--bg-secondary)]/50 border border-[var(--border-primary)] hover:border-[var(--danger)] text-[var(--text-secondary)] hover:text-[var(--danger)] transition-all" 
-                        title="Sign Out"
-                    >
+                    <button onClick={onLogout} className="p-2 rounded-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] hover:border-[var(--danger)] text-[var(--text-secondary)] hover:text-[var(--danger)] transition-all" title="Sign Out">
                         <LogoutIcon className="w-5 h-5" />
                     </button>
                 </div>
             </header>
 
-            {/* Main Workspace */}
-            <main className="flex-grow w-full max-w-5xl mx-auto px-4 pb-8 flex gap-6 relative z-10 h-[calc(100vh-120px)]">
-                
-                {/* Editor Section */}
-                <div className={`flex-grow flex flex-col transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${showChat ? 'mr-[400px]' : ''}`}>
-                    <div className="flex-grow bg-[var(--bg-secondary)]/40 backdrop-blur-xl rounded-[2rem] border border-[var(--border-primary)] shadow-2xl flex flex-col overflow-hidden relative transition-all">
-                        
-                        <div className="flex-grow overflow-y-auto custom-scrollbar p-8 md:p-12">
-                            
-                            {/* Mood Selector - Text Pill Row */}
-                            <div className="flex items-center gap-3 mb-8 overflow-x-auto pb-2 no-scrollbar">
-                                <span className="text-xs font-bold uppercase text-[var(--text-secondary)] whitespace-nowrap mr-2">Current Mood</span>
-                                {moods.map(mLabel => (
+            <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-4 flex gap-6 relative z-10 min-h-0">
+                <div className={`flex-1 flex flex-col transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${showChat ? 'mr-[380px] hidden md:flex' : ''}`}>
+                    <div className="flex-1 bg-[var(--bg-secondary)]/30 backdrop-blur-xl rounded-[2rem] border border-[var(--border-primary)] shadow-2xl flex flex-col overflow-hidden relative transition-all">
+                        <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center opacity-[0.03]">
+                             <div className="w-[60%] h-[60%] text-[var(--text-primary)] rotate-6"><SelectedDrawing className="w-full h-full" /></div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-8 md:p-12 relative z-10 flex flex-col">
+                            <div className="flex flex-wrap items-center gap-2 mb-8 animate-[fadeIn_0.5s_ease-out]">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)] mr-2">I'm feeling</span>
+                                {moods.map((m) => (
                                     <button 
-                                        key={mLabel}
-                                        onClick={() => setMood(mLabel)}
-                                        className={`group px-4 py-1.5 rounded-full text-xs font-bold transition-all border shadow-sm whitespace-nowrap
-                                            ${mood === mLabel 
-                                                ? `${moodGradients[mLabel]} text-white shadow-md scale-105 border-2` 
-                                                : 'bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+                                        key={m.label} 
+                                        onClick={() => setMood(m.label)}
+                                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border
+                                            ${mood === m.label 
+                                                ? `bg-[var(--accent)] text-white ring-2 ring-offset-1 ring-offset-[var(--bg-secondary)] border-transparent shadow-sm scale-105` 
+                                                : 'bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--accent)]'
                                             }`}
                                     >
-                                        {mLabel}
+                                        {m.label}
                                     </button>
                                 ))}
                             </div>
-
-                            {/* Title Input */}
                             <input 
                                 type="text" 
                                 placeholder="Title your day..." 
-                                className="w-full bg-transparent border-none outline-none text-4xl md:text-5xl font-journal font-bold text-[var(--text-primary)] placeholder-[var(--text-secondary)]/30 mb-6"
+                                className="w-full bg-transparent border-none outline-none text-3xl md:text-4xl font-bold text-[var(--text-primary)] placeholder-[var(--text-secondary)]/30 mb-6"
+                                style={{ fontFamily: 'var(--font-heading)' }}
                             />
-
-                            {/* Text Editor */}
                             <textarea 
-                                value={entry}
-                                onChange={(e) => setEntry(e.target.value)}
-                                placeholder="What's on your mind?" 
-                                className="w-full bg-transparent border-none outline-none text-xl md:text-2xl leading-loose font-journal text-[var(--text-primary)] placeholder-[var(--text-secondary)]/30 resize-none min-h-[400px]"
+                                value={entry} 
+                                onChange={handleEntryChange} 
+                                placeholder="Start writing..." 
+                                className="w-full bg-transparent border-none outline-none text-lg md:text-xl leading-relaxed text-[var(--text-primary)] placeholder-[var(--text-secondary)]/30 resize-none flex-grow min-h-[300px]" 
+                                style={{ fontFamily: 'var(--font-body)' }}
                             />
-
-                            {/* Gratitude Card */}
-                            <div className="mt-16">
-                                <div className="bg-gradient-to-br from-[var(--bg-primary)]/80 to-[var(--bg-primary)]/40 rounded-2xl p-6 border border-[var(--border-primary)] shadow-sm">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="p-1.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)]">
-                                            <SparklesIcon className="w-4 h-4" />
-                                        </div>
-                                        <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)]">Daily Gratitude</h3>
-                                    </div>
+                            <div className="mt-8 pt-8 border-t border-[var(--border-primary)]/50">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <SparklesIcon className="w-4 h-4 text-[var(--accent)]" />
+                                    <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">Daily Gratitude</h3>
+                                </div>
+                                <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4 border border-[var(--border-primary)] focus-within:border-[var(--accent)] transition-all">
                                     <textarea 
-                                        value={gratitude}
-                                        onChange={(e) => setGratitude(e.target.value)}
-                                        placeholder="I am grateful for..."
-                                        className="w-full bg-transparent border-none outline-none text-lg font-journal text-[var(--text-primary)] placeholder-[var(--text-secondary)]/40 resize-none h-24 leading-relaxed"
+                                        value={gratitude} 
+                                        onChange={(e) => setGratitude(e.target.value)} 
+                                        placeholder="I am grateful for..." 
+                                        className="w-full bg-transparent border-none outline-none text-base text-[var(--text-primary)] placeholder-[var(--text-secondary)]/40 resize-none h-16 leading-relaxed p-0" 
+                                        style={{ fontFamily: 'var(--font-body)' }}
                                     />
                                 </div>
                             </div>
-
-                            <div className="h-20" />
                         </div>
-
-                        {/* Floating Chat Trigger */}
-                        <div className="absolute bottom-8 right-8 z-20">
-                            <button 
-                                onClick={() => setShowChat(!showChat)}
-                                className={`flex items-center gap-3 pl-4 pr-2 py-2 rounded-full shadow-xl border transition-all hover:scale-105 active:scale-95
-                                    ${showChat 
-                                        ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] border-[var(--border-primary)]' 
-                                        : 'bg-[var(--accent)] text-white border-transparent'
-                                    }`}
-                            >
-                                <span className="text-sm font-bold">{showChat ? 'Close Companion' : 'AI Companion'}</span>
-                                <div className={`p-2 rounded-full ${showChat ? 'bg-[var(--bg-secondary)]' : 'bg-white/20'}`}>
-                                    <SparklesIcon className="w-4 h-4" />
-                                </div>
+                        <div className="absolute bottom-6 right-6 z-20">
+                            <button onClick={() => setShowChat(!showChat)} className={`flex items-center gap-3 pl-4 pr-2 py-2 rounded-full shadow-lg border transition-all hover:scale-105 ${showChat ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] border-[var(--border-primary)]' : 'bg-[var(--accent)] text-white border-transparent'}`}>
+                                <span className="text-sm font-bold">{showChat ? 'Close AI' : 'AI Companion'}</span>
+                                <div className={`p-2 rounded-full ${showChat ? 'bg-[var(--bg-secondary)]' : 'bg-white/20'}`}><SparklesIcon className="w-4 h-4" /></div>
                             </button>
                         </div>
                     </div>
                 </div>
 
-                {/* Right Sidebar - Chat */}
-                <div className={`fixed top-[100px] right-4 md:right-8 bottom-8 w-[380px] z-30 pointer-events-none transition-transform duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${showChat ? 'translate-x-0' : 'translate-x-[120%]'}`}>
+                <div className={`fixed top-[85px] right-6 bottom-6 w-[360px] z-30 pointer-events-none transition-transform duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${showChat ? 'translate-x-0' : 'translate-x-[120%]'}`}>
                     <div className="w-full h-full flex flex-col bg-[var(--bg-secondary)]/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-[var(--border-primary)] overflow-hidden pointer-events-auto">
-                        {/* Header */}
-                        <div className="p-5 border-b border-[var(--border-primary)] flex justify-between items-center bg-[var(--bg-primary)]/50">
-                            <div>
-                                <h3 className="font-bold text-[var(--text-primary)] text-lg">Companion</h3>
-                                <p className="text-xs text-[var(--text-secondary)]">AI-Powered Reflection</p>
+                        <div className="p-4 border-b border-[var(--border-primary)] flex justify-between items-center bg-[var(--bg-primary)]/50">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-[var(--accent)]/10 rounded-lg text-[var(--accent)]"><LightBulbIcon className="w-5 h-5" /></div>
+                                <div>
+                                    <h3 className="font-bold text-[var(--text-primary)] text-sm">Reflection AI</h3>
+                                    <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wide">Journal Companion</p>
+                                </div>
                             </div>
-                            <button onClick={handleGetPrompt} className="text-xs font-bold text-[var(--accent)] hover:bg-[var(--accent)]/10 px-3 py-1.5 rounded-full transition-colors border border-[var(--accent)]/20">
-                                Get Prompt
-                            </button>
+                            <button onClick={handleGetPrompt} className="text-[10px] font-bold text-[var(--accent)] hover:bg-[var(--accent)]/10 px-3 py-1.5 rounded-full transition-colors border border-[var(--border-primary)]">Get Prompt</button>
                         </div>
-
-                        {/* Chat History */}
-                        <div ref={scrollRef} className="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[var(--bg-primary)]/30">
+                        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[var(--bg-primary)]/30">
                             {chatHistory.length === 0 && (
-                                <div className="flex flex-col items-center justify-center h-full text-[var(--text-secondary)] opacity-60 text-center p-6">
-                                    <LightBulbIcon className="w-12 h-12 mb-3 stroke-1" />
+                                <div className="flex flex-col items-center justify-center h-full text-[var(--text-secondary)] opacity-60 text-center p-6 gap-4">
+                                    <div className="w-16 h-16 rounded-full bg-[var(--bg-primary)] flex items-center justify-center border border-[var(--border-primary)]"><SparklesIcon className="w-8 h-8 text-[var(--accent)]" /></div>
                                     <p className="text-sm">I'm here to help you process your thoughts. Start writing or ask me anything.</p>
                                 </div>
                             )}
                             {chatHistory.map((msg, i) => (
-                                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                                        msg.role === 'user' 
-                                            ? 'bg-[var(--accent)] text-white rounded-br-sm' 
-                                            : 'bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-bl-sm'
-                                    }`}>
-                                        {msg.text}
-                                    </div>
+                                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-[messageSlideUp_0.3s_ease-out]`}>
+                                    <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-[var(--accent)] text-white rounded-br-sm' : 'bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-bl-sm'}`}>{msg.text}</div>
                                 </div>
                             ))}
                             {isAiThinking && (
@@ -407,29 +291,14 @@ const JournalPage: React.FC<JournalPageProps> = ({ user, onBack, onLogout, theme
                                 </div>
                             )}
                         </div>
-
-                        {/* Input Area */}
-                        <div className="p-4 bg-[var(--bg-primary)]/80 border-t border-[var(--border-primary)]">
+                        <div className="p-3 bg-[var(--bg-primary)]/80 border-t border-[var(--border-primary)]">
                             <form onSubmit={handleChatSubmit} className="relative">
-                                <input 
-                                    type="text" 
-                                    value={chatInput}
-                                    onChange={(e) => setChatInput(e.target.value)}
-                                    placeholder="Type a message..." 
-                                    className="w-full pl-4 pr-12 py-3 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent outline-none text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 shadow-inner transition-all"
-                                />
-                                <button 
-                                    type="submit" 
-                                    disabled={!chatInput.trim() || isAiThinking}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-[var(--accent)] text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-                                >
-                                    <ChevronRightIcon className="w-4 h-4" />
-                                </button>
+                                <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Type a message..." className="w-full pl-4 pr-10 py-3 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl focus:ring-2 focus:ring-[var(--accent)] outline-none text-sm text-[var(--text-primary)] placeholder-[var(--text-secondary)]/50 shadow-inner transition-all" />
+                                <button type="submit" disabled={!chatInput.trim() || isAiThinking} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-[var(--accent)] text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-all shadow-sm"><ChevronRightIcon className="w-4 h-4" /></button>
                             </form>
                         </div>
                     </div>
                 </div>
-
             </main>
         </div>
     );

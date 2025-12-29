@@ -51,7 +51,8 @@ const SummaryView: React.FC<SummaryViewProps> = ({ summaryContent, onClose, onAp
   };
 
   const handleAppend = () => {
-    const plainText = summaryContent.replace(/<[^>]+>/g, '');
+    // Strip XML-like tags for cleaner insertion into the note
+    const plainText = summaryContent.replace(/<\/?[a-z]{2}>/g, ''); 
     onAppend(plainText);
   };
   

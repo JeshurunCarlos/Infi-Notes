@@ -10,21 +10,22 @@ export async function generateHighlightedSummary(text: string): Promise<string> 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `Please provide a comprehensive, structured summary of the following text.
-- Use bullet points for readability.
-- Use <bd>...</bd> tags to bold important phrases or concepts for emphasis.
-- Identify and wrap specific entities with the following tags:
-  - Key points: <kp>...</kp>
-  - People: <ps>...</ps>
-  - Dates: <dt>...</dt>
-  - Locations: <lc>...</lc>
+      model: 'gemini-3-flash-preview',
+      contents: `Summarize the text below using bullet points for readability.
+      
+CRITICAL INSTRUCTION: You must use specific XML-like tags to highlight entities. Do NOT use markdown bolding (**text**).
+Use the following tags:
+- <bd>Text</bd> for BOLDING key phrases, important concepts, or emphasis.
+- <kp>Text</kp> for Key Points or main ideas.
+- <ps>Text</ps> for People or names.
+- <dt>Text</dt> for Dates, times, or years.
+- <lc>Text</lc> for Locations or places.
 
-Example:
-- The study conducted by <ps>Dr. No</ps> revealed <bd>significant anomalies</bd>.
-- On <dt>May 4th</dt>, the team visited <lc>London</lc>.
+Example Format:
+- The <kp>initiative</kp> was led by <ps>Dr. Smith</ps> in <lc>Paris</lc>.
+- On <dt>Monday</dt>, results showed <bd>significant improvement</bd>.
 
-Here is the text to summarize:
+Text to summarize:
 ---
 ${text}`,
       config: {
@@ -49,7 +50,7 @@ export async function generateQuizFromNotes(text: string): Promise<Question[]> {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-pro-preview',
             contents: `Based on the following notes, generate a quiz with 3 to 5 questions. Create a mix of multiple-choice and short-answer questions to test knowledge. For multiple-choice questions, provide 4 options. Ensure the correct answer is one of the options for MCQs.
 
 Here are the notes:
@@ -104,7 +105,7 @@ export async function performGoogleSearch(query: string): Promise<{ text: string
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: `You are a helpful and knowledgeable assistant. Answer the following query using Google Search.
             
 Important Formatting Rules:
@@ -137,7 +138,7 @@ export async function getMusicSuggestions(mood: string): Promise<string[]> {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: `Suggest 4 distinct songs, albums, or playlists on Spotify for a "${mood}" mood. Return ONLY a JSON array of strings, where each string is a search query I can use to find it on Spotify (e.g. "Song Name Artist" or "Album Name Artist").`,
              config: {
                 responseMimeType: 'application/json',
@@ -175,7 +176,7 @@ export async function lookupDictionary(word: string): Promise<DictionaryResult> 
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: `Define the word '${word}'. Return a JSON object with the following structure:
             - word: string
             - phonetic: string (IPA notation)
@@ -249,7 +250,7 @@ export async function chatWithJournal(journalContent: string, userMessage: strin
         const prompt = `${systemInstruction}\n\nConversation History:\n${historyText}\nUser: ${userMessage}\nAI:`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt
         });
 
@@ -260,7 +261,13 @@ export async function chatWithJournal(journalContent: string, userMessage: strin
     }
 }
 
-export async function performChat(message: string, history: { role: 'user' | 'model', text: string }[]): Promise<string> {
+export interface ChatResponse {
+    text: string;
+    sources: { title: string; uri: string }[];
+    followUps: string[];
+}
+
+export async function performChat(message: string, history: { role: 'user' | 'model', text: string }[]): Promise<ChatResponse> {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
@@ -276,7 +283,12 @@ export async function performChat(message: string, history: { role: 'user' | 'mo
         1. Use **bold** for emphasis on key terms.
         2. Use bullet points or lists for structured data.
         3. Use code blocks for code snippets.
-        4. If your answer depends on real-time information or search results, cite your sources at the end.
+        
+        At the very end of your response, strictly output a separator "|||" followed by a JSON list of 3 short follow-up questions the user might want to ask next.
+        Example format:
+        [Answer Text...]
+        |||
+        ["Question 1?", "Question 2?", "Question 3?"]
         
         Conversation History:
         ${historyText}
@@ -284,30 +296,49 @@ export async function performChat(message: string, history: { role: 'user' | 'mo
         AI:`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
             config: {
                 tools: [{ googleSearch: {} }]
             }
         });
 
-        let text = response.text as string || "I couldn't generate a response.";
-        const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        let rawText = response.text as string || "I couldn't generate a response.";
+        let text = rawText;
+        let followUps: string[] = [];
 
-        // Append sources to text if available
-        if (sources.length > 0) {
-            text += "\n\n**Sources:**\n";
-            sources.forEach((chunk: any) => {
-                if (chunk.web) {
-                    text += `- [${chunk.web.title}](${chunk.web.uri})\n`;
+        // Parse Follow-ups
+        const splitParts = rawText.split('|||');
+        if (splitParts.length > 1) {
+            text = splitParts[0].trim();
+            try {
+                const followUpsJson = splitParts[1].trim();
+                const parsed = JSON.parse(followUpsJson);
+                if (Array.isArray(parsed)) {
+                    followUps = parsed;
                 }
-            });
+            } catch (e) {
+                console.warn("Failed to parse follow-up questions JSON", e);
+            }
         }
 
-        return text;
+        const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const sources: { title: string; uri: string }[] = [];
+
+        groundingChunks.forEach((chunk: any) => {
+            if (chunk.web) {
+                sources.push({ title: chunk.web.title, uri: chunk.web.uri });
+            }
+        });
+
+        return { text, sources, followUps };
     } catch (error) {
         console.error("Chat Error", error);
-        return "I encountered an error processing your request. Please try again.";
+        return { 
+            text: "I encountered an error processing your request. Please try again.", 
+            sources: [], 
+            followUps: [] 
+        };
     }
 }
 
@@ -316,19 +347,60 @@ export interface NewsItem {
     summary: string;
     source: string;
     url: string;
+    imageUrl?: string;
+}
+
+export interface WeatherData {
+    location: string;
+    temperature: number;
+    condition: string;
+    icon: string;
+    wind: string;
+    humidity: string;
+}
+
+export async function fetchWeather(location: string): Promise<WeatherData> {
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Get the current weather for ${location}. Return a JSON object with location, temperature (in Celsius), condition (e.g., "Sunny"), a single emoji icon for the condition, wind (e.g., "10 km/h"), and humidity (e.g., "60%").`,
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        location: { type: Type.STRING },
+                        temperature: { type: Type.NUMBER },
+                        condition: { type: Type.STRING },
+                        icon: { type: Type.STRING },
+                        wind: { type: Type.STRING },
+                        humidity: { type: Type.STRING },
+                    },
+                    required: ['location', 'temperature', 'condition', 'icon', 'wind', 'humidity']
+                }
+            }
+        });
+
+        return JSON.parse(response.text as string);
+    } catch (error) {
+        console.error("Error fetching weather:", error);
+        throw new Error("Could not fetch weather data.");
+    }
 }
 
 export async function fetchNews(): Promise<NewsItem[]> {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: `Find the top 5 latest world news headlines right now. 
             Return ONLY a valid raw JSON array string (no markdown formatting, no code blocks) where each object has:
             - "title": The headline.
             - "summary": A concise summary (max 30 words).
             - "source": The name of the news source.
             - "url": A link to the story (if available from search results, otherwise leave empty).
+            - "imageUrl": A URL to a relevant image for the news story if found, otherwise null.
             `,
             config: {
                 tools: [{ googleSearch: {} }]
@@ -337,15 +409,17 @@ export async function fetchNews(): Promise<NewsItem[]> {
 
         let jsonString = response.text || "[]";
         
-        // Robust JSON extraction: Find first [ and last ]
-        const firstBracket = jsonString.indexOf('[');
-        const lastBracket = jsonString.lastIndexOf(']');
-        
-        if (firstBracket !== -1 && lastBracket !== -1) {
-            jsonString = jsonString.substring(firstBracket, lastBracket + 1);
+        // Safer JSON extraction using robust pattern finding
+        const match = jsonString.match(/\[\s*\{.*\}\s*\]/s);
+        if (match) {
+            jsonString = match[0];
         } else {
-            console.warn("No JSON array found in news response");
-            return [];
+            console.warn("Regex fallback for JSON array extraction");
+            const firstBracket = jsonString.indexOf('[');
+            const lastBracket = jsonString.lastIndexOf(']');
+            if (firstBracket !== -1 && lastBracket !== -1) {
+                jsonString = jsonString.substring(firstBracket, lastBracket + 1);
+            } else return [];
         }
         
         const newsItems = JSON.parse(jsonString);
@@ -365,7 +439,7 @@ export async function generateSpeechFromText(text: string): Promise<ArrayBuffer>
             model: "gemini-2.5-flash-preview-tts",
             contents: [{ parts: [{ text }] }],
             config: {
-                responseModalities: [Modality.AUDIO], // Strictly use Modality enum
+                responseModalities: [Modality.AUDIO], 
                 speechConfig: {
                     voiceConfig: {
                         prebuiltVoiceConfig: { voiceName: 'Kore' },
@@ -377,7 +451,6 @@ export async function generateSpeechFromText(text: string): Promise<ArrayBuffer>
         const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         if (!base64Audio) throw new Error("No audio generated.");
 
-        // Decode Base64 to ArrayBuffer
         const binaryString = atob(base64Audio);
         const len = binaryString.length;
         const bytes = new Uint8Array(len);

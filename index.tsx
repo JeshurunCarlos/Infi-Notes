@@ -7,7 +7,7 @@ import JournalPage from './components/JournalPage';
 import WidgetPage from './components/WidgetPage';
 import LoadingScreen from './components/LoadingScreen';
 import ThemeSelectionPage from './components/ThemeSelectionPage';
-import { CandyBoxMenu } from './components/CandyBoxMenu';
+import LoginPage from './components/LoginPage';
 import { User, Theme } from './types';
 
 const rootElement = document.getElementById('root');
@@ -15,26 +15,28 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-// A mock user for demonstration purposes
-const MOCK_USER: User = {
-  id: 'mock-user-123',
-  name: 'Thanos Subramaniyam',
-  email: 'thanos.subm@example.com',
-  avatar: 'https://i.pravatar.cc/150?u=alexrider'
+const DEFAULT_USER: User = {
+    id: 'mock-user-123',
+    name: 'Jeshurun',
+    email: 'jeshurun@example.com',
+    avatar: 'https://i.pravatar.cc/150?u=alexrider'
 };
 
 const AuthWrapper = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [viewMode, setViewMode] = useState<'theme-selection' | 'landing' | 'app' | 'journal' | 'widgets'>('theme-selection');
+  const [user, setUser] = useState<User | null>(DEFAULT_USER);
+  const [viewMode, setViewMode] = useState<'theme-selection' | 'landing' | 'login' | 'app' | 'journal' | 'widgets'>('landing');
   const [theme, setTheme] = useState<Theme>('light');
   const [isLoading, setIsLoading] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<'modern' | 'classic'>('modern');
+  
+  const [startWithDashboard, setStartWithDashboard] = useState(true);
+  const [hasSelectedTheme, setHasSelectedTheme] = useState(true);
+  const [pendingView, setPendingView] = useState<'app' | 'journal' | 'widgets' | null>(null);
 
-  // Apply theme class to document
   useEffect(() => {
     document.documentElement.className = theme;
   }, [theme]);
 
-  // Load saved font preference
   useEffect(() => {
       const savedFont = localStorage.getItem('infi-font-body');
       if (savedFont) {
@@ -56,36 +58,56 @@ const AuthWrapper = () => {
   };
 
   const handleThemeConfirm = () => {
+      setHasSelectedTheme(true);
       handleTransition(() => {
-          setViewMode('landing');
+          setViewMode(pendingView || 'app');
+          setPendingView(null);
       });
   };
 
-  const handleLogin = () => {
-    handleTransition(() => {
-        setUser(MOCK_USER);
-        setViewMode('app'); // Go directly to app to avoid "2nd iteration" of landing page
-    });
+  const attemptNavigation = (targetView: 'app' | 'journal' | 'widgets') => {
+      if (hasSelectedTheme) {
+          handleTransition(() => {
+              setViewMode(targetView);
+          });
+      } else {
+          setPendingView(targetView);
+          handleTransition(() => {
+              setViewMode('theme-selection');
+          });
+      }
   };
 
-  const handleEnterApp = () => {
+  const handleGoToLogin = () => {
       handleTransition(() => {
-          setViewMode('app');
+          setViewMode('login');
       });
   };
 
-  const handleOpenJournal = () => {
-      handleTransition(() => {
-          if (!user) setUser(MOCK_USER); // Auto-login if coming from landing publicly
-          setViewMode('journal');
-      });
+  const handleLoginSuccess = (selectedUser: User) => {
+      setUser(selectedUser);
+      attemptNavigation('app');
   };
 
-  const handleOpenWidgets = () => {
-      handleTransition(() => {
-          if (!user) setUser(MOCK_USER);
-          setViewMode('widgets');
-      });
+  const handleOpenJournal = () => attemptNavigation('journal');
+  const handleOpenWidgets = () => attemptNavigation('widgets');
+
+  const handleLaunchWorkspace = () => {
+      setStartWithDashboard(false);
+      if (user) {
+          attemptNavigation('app');
+      } else {
+          handleGoToLogin();
+      }
+  };
+
+  const handleOpenDashboard = () => {
+      setStartWithDashboard(true);
+      if (user) {
+          attemptNavigation('app');
+      } else {
+          handleGoToLogin();
+      }
   };
 
   const handleLogout = () => {
@@ -101,6 +123,16 @@ const AuthWrapper = () => {
       });
   };
 
+  const handleBackFromWidgets = () => {
+      handleTransition(() => {
+          if (user) {
+              setViewMode('app');
+          } else {
+              setViewMode('landing');
+          }
+      });
+  };
+
   const handleNavigate = (view: any) => {
       handleTransition(() => {
           setViewMode(view);
@@ -109,59 +141,62 @@ const AuthWrapper = () => {
 
   return (
     <>
-        {isLoading && <LoadingScreen />}
+        {isLoading && <LoadingScreen theme={theme} />}
         
         {viewMode === 'theme-selection' ? (
             <ThemeSelectionPage 
                 currentTheme={theme}
                 onPreviewTheme={handleThemePreview} 
                 onContinue={handleThemeConfirm}
+                layoutMode={layoutMode}
+                onLayoutChange={setLayoutMode}
+            />
+        ) : (!user && viewMode === 'login') ? (
+            <LoginPage 
+                onSelectUser={handleLoginSuccess}
+                onBack={handleBackToLanding}
             />
         ) : (!user || viewMode === 'landing') ? (
             <LandingPage 
-                onLogin={user ? handleEnterApp : handleLogin} // If logged in, enter app. If not, login.
+                onLogin={handleLaunchWorkspace} 
+                onOpenDashboard={handleOpenDashboard}
                 onOpenJournal={handleOpenJournal} 
                 onOpenWidgets={handleOpenWidgets} 
+                onOpenThemeSelection={() => handleNavigate('theme-selection')}
                 user={user}
                 currentTheme={theme}
                 onSetTheme={setTheme}
             />
         ) : viewMode === 'journal' ? (
             <JournalPage 
-                user={user} 
+                user={user!} 
                 onBack={handleBackToLanding} 
                 onLogout={handleLogout} 
                 theme={theme} 
                 setTheme={setTheme} 
+                onGoHome={handleBackToLanding}
             />
         ) : viewMode === 'widgets' ? (
             <WidgetPage 
-                onBack={handleBackToLanding} 
+                onBack={handleBackFromWidgets} 
                 theme={theme} 
                 setTheme={setTheme} 
+                onGoHome={handleBackToLanding}
             />
         ) : (
             <App 
-                user={user} 
+                key={`app-view-${startWithDashboard}`} // Fix: key forces remount when preference changes
+                user={user as User} // Fix: Guaranteed non-null at this branch by previous conditions
                 onLogout={handleLogout} 
                 theme={theme} 
                 setTheme={setTheme} 
                 onOpenWidgets={handleOpenWidgets}
+                onOpenJournal={handleOpenJournal}
                 onGoHome={handleBackToLanding}
                 onUpdateUser={(updatedUser) => setUser(updatedUser)}
-            />
-        )}
-
-        {/* Global Candy Box Menu - Rendered on all pages except initial theme selection */}
-        {viewMode !== 'theme-selection' && !isLoading && (
-            <CandyBoxMenu 
-                currentView={viewMode}
-                onNavigate={handleNavigate}
-                theme={theme}
-                setTheme={setTheme}
-                user={user}
-                onLogin={handleLogin}
-                onLogout={handleLogout}
+                initialShowDashboard={startWithDashboard}
+                layoutMode={layoutMode}
+                onLayoutChange={setLayoutMode}
             />
         )}
     </>

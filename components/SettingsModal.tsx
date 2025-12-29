@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
 import { User } from '../types';
-import { CameraIcon, LogoutIcon, UserIcon, EyeSlashIcon, CheckIcon } from './Icons';
+import { CameraIcon, LogoutIcon, UserIcon, EyeSlashIcon, CheckIcon, ArrowsPointingOutIcon, LayoutDashboardIcon } from './Icons';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -10,6 +10,10 @@ interface SettingsModalProps {
     user: User;
     onUpdateUser: (user: User) => void;
     onLogout: () => void;
+    hideHeader: boolean;
+    onToggleHideHeader: () => void;
+    layoutMode: 'modern' | 'classic';
+    onLayoutChange: (mode: 'modern' | 'classic') => void;
 }
 
 const DEFAULT_AVATARS = [
@@ -23,7 +27,7 @@ const DEFAULT_AVATARS = [
     'https://api.dicebear.com/7.x/bottts/svg?seed=Ginger',
 ];
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, onUpdateUser, onLogout }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, onUpdateUser, onLogout, hideHeader, onToggleHideHeader, layoutMode, onLayoutChange }) => {
     const [name, setName] = useState(user.name);
     const [avatar, setAvatar] = useState(user.avatar);
     const [incognito, setIncognito] = useState(false);
@@ -90,6 +94,35 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
 
                 <div className="h-px bg-[var(--border-primary)]" />
 
+                {/* Interface Layout */}
+                <div className="space-y-3">
+                    <label className="text-xs font-bold uppercase text-[var(--text-secondary)]">Interface Layout</label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button
+                            onClick={() => onLayoutChange('modern')}
+                            className={`p-3 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${layoutMode === 'modern' ? 'border-[var(--accent)] bg-[var(--accent)]/5 text-[var(--accent)]' : 'border-[var(--border-primary)] hover:bg-[var(--bg-primary)]'}`}
+                        >
+                            <div className="flex gap-1">
+                                <div className="w-4 h-6 rounded bg-current opacity-50"></div>
+                                <div className="w-6 h-6 rounded bg-current opacity-80"></div>
+                            </div>
+                            <span className="text-xs font-bold">Modern (Curved)</span>
+                        </button>
+                        <button
+                            onClick={() => onLayoutChange('classic')}
+                            className={`p-3 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${layoutMode === 'classic' ? 'border-[var(--accent)] bg-[var(--accent)]/5 text-[var(--accent)]' : 'border-[var(--border-primary)] hover:bg-[var(--bg-primary)]'}`}
+                        >
+                            <div className="flex gap-0 border border-current p-0.5 opacity-80">
+                                <div className="w-4 h-5 border-r border-current"></div>
+                                <div className="w-6 h-5"></div>
+                            </div>
+                            <span className="text-xs font-bold">Classic (Sharp)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="h-px bg-[var(--border-primary)]" />
+
                 {/* Preferences */}
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -104,6 +137,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" checked={incognito} onChange={(e) => setIncognito(e.target.checked)} className="sr-only peer" />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--accent)]"></div>
+                        </label>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-[var(--text-primary)]">
+                                <ArrowsPointingOutIcon className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <p className="font-bold text-sm text-[var(--text-primary)]">Auto-hide Header</p>
+                                <p className="text-xs text-[var(--text-secondary)]">Show top bar only on hover</p>
+                            </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={hideHeader} onChange={onToggleHideHeader} className="sr-only peer" />
                             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--accent)]"></div>
                         </label>
                     </div>
